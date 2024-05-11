@@ -3,8 +3,9 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/tauri';
 
-	let path: String = '';
-	let playState = '';
+	let path: string = '';
+	let playState: string;
+	$: playState = '';
 
 	async function toggle_playback() {
 		// console.log('toggle_playback called');

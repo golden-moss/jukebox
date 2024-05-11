@@ -22,6 +22,7 @@ lofty = "0.19.2"                                    # for reading audio tags
 rodio = "0.18.0"                                    # for playing audio files
 thiserror = "1.0.60"
 figment = { version = "0.10", features = ["toml"] }
+toml = "0.8.12"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
