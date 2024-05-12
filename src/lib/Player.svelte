@@ -2,17 +2,26 @@
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/tauri';
+	import { playState } from '$lib/playstate';
+	import { onMount } from 'svelte';
 
-	let path: string = '';
-	let playState: string;
-	$: playState = '';
+	let localState: string;
 
 	async function toggle_playback() {
-		// console.log('toggle_playback called');
-		playState = await invoke('toggle_playback');
+		if ($playState) {
+			playState.update(() => false);
+			localState = await invoke('toggle_playback');
+		} else {
+			playState.update(() => true);
+			localState = await invoke('toggle_playback');
+		}
 	}
+
+	onMount(() => {
+		toggle_playback();
+	});
 </script>
 
 <div>
-	<button on:click={toggle_playback}>{playState}</button>
+	<button on:click={toggle_playback}>{localState}</button>
 </div>

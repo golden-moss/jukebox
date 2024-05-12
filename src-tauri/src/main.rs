@@ -16,15 +16,18 @@ use thiserror::Error;
 #[derive(Debug, Serialize, Deserialize)]
 struct GlobalSettings {
     folder_to_scan: String, // TODO add ability to scan multiple folders
-    volume: f32,            // lets leave this at 1.0 for now
                             // theme: VisualTheme
+}
+
+struct PlaybackSettings {
+    volume: f32, // lets leave this at 1.0 for now
+    speed: f32,  // lets leave this at 1.0 for now
 }
 
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
             folder_to_scan: String::from("./"),
-            volume: 1.0,
         }
     }
 }
@@ -54,6 +57,7 @@ impl serde::Serialize for JbError {
 }
 
 struct Jukebox(Sink);
+// struct PlayQueue
 
 #[derive(serde::Serialize)]
 pub enum PlaybackState {
@@ -79,12 +83,8 @@ fn get_global_settings() -> Result<GlobalSettings, JbError> {
 
 #[tauri::command]
 fn toggle_playback(state: tauri::State<Jukebox>) -> Result<PlaybackState, JbError> {
-    // TODO currently this requires 2 clicks to start playback, since the frontend does know the state ahead of time, so the first click will return Pause and not actually start the playback until the second click, when it is toggled to Play.
-    // could be solved by just calling it once with no arguements on startup, not sure if that would cause any side-effects though.
     let jb = &state.0;
-    jb.append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
-        "../test.flac",
-    )?))?);
+    add_song_to_queue(&jb)?;
     if jb.is_paused() {
         jb.play();
         Ok(PlaybackState::Play)
@@ -92,6 +92,13 @@ fn toggle_playback(state: tauri::State<Jukebox>) -> Result<PlaybackState, JbErro
         jb.pause();
         Ok(PlaybackState::Pause)
     }
+}
+
+#[tauri::command]
+fn stop_playback(state: tauri::State<Jukebox>) -> Result<PlaybackState, JbError> {
+    let jb = &state.0;
+    jb.stop();
+    Ok(PlaybackState::Stop)
 }
 
 // Functions
@@ -104,6 +111,13 @@ fn read_or_create_config(config_path: &str) -> Result<GlobalSettings, JbError> {
     }
     let settings: GlobalSettings = Figment::new().merge(Toml::file(config_path)).extract()?;
     Ok(settings)
+}
+
+fn add_song_to_queue(jb: &Sink) -> Result<(), JbError> {
+    jb.append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
+        "../test.flac",
+    )?))?);
+    Ok(())
 }
 
 fn main() {
