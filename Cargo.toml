@@ -11,11 +11,11 @@ rust-version = "1.60"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-iced = "0.12.1"
+iced = { version = "0.12.1", features = ["image", "svg"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-lofty = "0.19.2"                                    # for reading audio tags
-rodio = "0.18.0"                                    # for playing audio files
+lofty = "0.19.2"
+rodio = "0.18.0"
 anyhow = "1.0.0"
 figment = { version = "0.10", features = ["toml"] }
 toml = "0.8.12"
