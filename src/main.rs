@@ -8,18 +8,17 @@ use figment::{
     providers::{Format, Toml},
     Figment,
 };
-use lofty::file::TaggedFileExt;
-use lofty::read_from_path;
+// use lofty::file::TaggedFileExt;
+// use lofty::read_from_path;
 use rodio::Sink;
 use serde::{Deserialize, Serialize};
 use std::{io::BufReader, path::Path};
 
 use iced::{
     executor,
-    widget::{button, container, horizontal_space, row},
-    Application, Command, Size, Subscription,
+    widget::{button, container, horizontal_space, row, scrollable, text},
+    Application, Command, Element, Length, Settings, Size, Subscription, Theme,
 };
-use iced::{Element, Length, Settings, Theme};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct GlobalSettings {
@@ -157,14 +156,21 @@ impl Application for Jukebox {
     }
 
     fn view(&self) -> Element<Message> {
-        let controls = row![]
-            .push(button("Play").on_press(Message::PlaybackState(PlaybackState::Play)))
-            .push(horizontal_space())
-            .push(button("Stop").on_press(Message::PlaybackState(PlaybackState::Stop)))
-            .push(horizontal_space())
-            .push(button("add song").on_press(Message::AddSongToQueue("TODO".to_string())));
+        // let library_list = scrollable(row![text("entire library goes here"),]);
+        let controls = row![
+            button("Play").on_press(Message::PlaybackState(PlaybackState::Play)),
+            // horizontal_space(),
+            button("Stop").on_press(Message::PlaybackState(PlaybackState::Stop)),
+            // horizontal_space(),
+            button("add song").on_press(Message::AddSongToQueue("TODO".to_string())),
+        ];
+        let global_layout = row![controls,];
 
-        container(controls).height(Length::Shrink).center_y().into()
+        container(global_layout)
+            .height(Length::Shrink)
+            .width(Length::Shrink)
+            .center_y()
+            .into()
     }
 }
 
