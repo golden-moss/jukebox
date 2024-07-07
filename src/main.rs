@@ -9,6 +9,7 @@ use library::{Library, Song};
 use rodio::Sink;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::VecDeque,
     io::BufReader,
     sync::{Arc, Mutex},
 };
@@ -35,6 +36,7 @@ impl Default for GlobalSettings {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
 struct PlaybackSettings {
     volume: f32, // lets leave this at 1.0 for now
     speed: f32,  // lets leave this at 1.0 for now
@@ -65,47 +67,120 @@ pub enum Message {
 }
 
 struct Jukebox {
-    sink: Sink,
+    sink: Option<Sink>,
     playing: bool,
     global_settings: GlobalSettings,
     playback_settings: PlaybackSettings,
     music_library: Arc<Mutex<Library>>,
+    playback_queue: Arc<Mutex<VecDeque<(Song, bool)>>>,
+    playback_index: usize,
 }
 
 impl Default for Jukebox {
     fn default() -> Self {
-        let sink = audio::new_sink();
-        sink.pause(); // prevents songs auto-playing when added to an empty queue
+        // TODO properly import instead of passing default
+        // TODO actually probably do not create sink until needed for playback
+
+        // let sink = audio::new_sink(PlaybackSettings::default());
+        // sink.pause(); // prevents songs auto-playing when added to an empty sink
 
         Self {
-            sink,
+            sink: None,
             playing: false,
             global_settings: GlobalSettings::default(), // TODO fetch
             playback_settings: PlaybackSettings::default(), // TODO fetch
             music_library: Arc::new(Mutex::new(Library::new())),
+            playback_queue: Arc::new(Mutex::new(VecDeque::new())),
+            playback_index: 0,
         }
     }
 }
 
 // Functionality
 impl Jukebox {
-    fn toggle_play(&mut self) {
-        let sink = &self.sink;
-        if sink.is_paused() {
-            sink.play();
-        } else {
-            sink.pause()
+    fn toggle_sink_playback(&mut self) {
+        if let Some(sink) = &self.sink {
+            if sink.is_paused() {
+                sink.play();
+            } else {
+                sink.pause()
+            }
         }
     }
 
-    fn add_song_to_queue(&self, song: Song) -> Result<()> {
-        //TODO this autoplays unless the Sink is alreay paused
-        let _ = &self
-            .sink
-            .append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
+    fn reorder_song_in_queue(&self, new_pos_in_queue: usize) -> Result<()> {
+        todo!()
+    }
+
+    fn add_song_to_queue_end(&self, song: Song) -> Result<()> {
+        self.playback_queue.lock().unwrap().push_back((song, false));
+        Ok(())
+    }
+
+    fn add_song_to_queue_start(&self, song: Song) -> Result<()> {
+        self.playback_queue
+            .lock()
+            .unwrap()
+            .push_front((song, false));
+        Ok(())
+    }
+
+    fn play_song_from_queue(&mut self) -> Result<()> {
+        let _ = &self.replace_sink()?;
+
+        let (song, mut is_current) = self
+            .playback_queue
+            .lock()
+            .unwrap()
+            .get(self.playback_index)
+            // .front()
+            .unwrap()
+            .clone();
+
+        is_current = true;
+
+        if let Some(sink) = &self.sink {
+            sink.append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
                 song.file_path,
             )?))?);
-        println!("added song to queue: {} by {}", song.title, song.artist);
+            println!(
+                "added song to current sink: {} by {}",
+                song.title, song.artist
+            );
+        }
+
+        Ok(())
+    }
+
+    fn replace_sink(&mut self) -> Result<()> {
+        self.kill_sink()?;
+        self.sink = Some(audio::new_sink(self.playback_settings));
+        Ok(())
+    }
+
+    fn kill_sink(&mut self) -> Result<()> {
+        if self.sink.is_some() {
+            self.sink = None;
+            println!("sink killed");
+        }
+        Ok(())
+    }
+
+    // fn stop_current_playback(&mut self) -> Result<()> {}
+
+    fn next_in_queue(&mut self) -> Result<()> {
+        if self.playback_index < self.playback_queue.lock().unwrap().len() {
+            self.playback_index += 1;
+        }
+        self.play_song_from_queue()?;
+        Ok(())
+    }
+
+    fn prev_in_queue(&mut self) -> Result<()> {
+        if self.playback_index > 0 {
+            self.playback_index -= 1;
+        }
+        self.play_song_from_queue()?;
         Ok(())
     }
 
@@ -127,7 +202,7 @@ impl Application for Jukebox {
     type Message = Message;
     type Theme = Theme;
 
-    fn new(_flags: ()) -> (Self, Command<Message>) {
+    fn new(_flags: () /*, settings: GlobalSettings*/) -> (Self, Command<Message>) {
         let app = Self::default();
         (app, Command::none())
     }
@@ -139,13 +214,26 @@ impl Application for Jukebox {
     fn update(&mut self, event: Message) -> Command<Message> {
         match event {
             Message::TogglePlayback => {
-                self.toggle_play();
+                if self.sink.is_none() {
+                    self.play_song_from_queue();
+                } else {
+                    self.toggle_sink_playback();
+                }
                 Command::none()
             }
             Message::AddTestSongToQueue => {
-                // TODO remove; has been replaced by PickSong(id)
+                // let _ = &self
+                //     .add_song_to_sink(Song {
+                //         id: 0,
+                //         title: "test song".to_owned(),
+                //         artist: "test artist".to_owned(),
+                //         duration: 60,
+                //         album_id: None,
+                //         file_path: "./test.ogg".into(),
+                //     })
+                //     .expect("adding song to queue failed");
                 let _ = &self
-                    .add_song_to_queue(Song {
+                    .add_song_to_queue_end(Song {
                         id: 0,
                         title: "test song".to_owned(),
                         artist: "test artist".to_owned(),
@@ -184,7 +272,7 @@ impl Application for Jukebox {
                 Command::none()
             }
             Message::PickSong(id) => {
-                self.add_song_to_queue(
+                self.add_song_to_queue_end(
                     self.music_library
                         .lock()
                         .unwrap()
@@ -246,8 +334,14 @@ impl Application for Jukebox {
                 }
                 Command::none()
             }
-            Message::PreviousSong => todo!(),
-            Message::NextSong => todo!(),
+            Message::PreviousSong => {
+                self.prev_in_queue();
+                Command::none()
+            }
+            Message::NextSong => {
+                self.next_in_queue();
+                Command::none()
+            }
         }
     }
 
@@ -271,15 +365,33 @@ impl Application for Jukebox {
                 )
             },
         );
+
+        let queue_list = column![
+            text("Queue"),
+            self.playback_queue.lock().unwrap().iter().fold(
+                column![].spacing(5),
+                |column, (song, is_current)| {
+                    column.push(text(format!(
+                        "{} - {} ({}) : {}",
+                        song.title, song.artist, song.duration, is_current
+                    )))
+                },
+            )
+        ];
+
         let scan_zone = column![
             button("scan folder").on_press(Message::Scan),
             scrollable(song_list).height(Length::Fill)
         ];
+
         let controls = row![
+            button("previous song").on_press(Message::PreviousSong),
             button(play_pause_text).on_press(Message::TogglePlayback),
+            button("next song").on_press(Message::NextSong),
             button("add test song").on_press(Message::AddTestSongToQueue),
         ];
-        let global_layout = column![controls, debug_save_load_buttons, scan_zone];
+
+        let global_layout = column![controls, debug_save_load_buttons, scan_zone, queue_list];
 
         container(global_layout)
             .height(Length::Fill)
