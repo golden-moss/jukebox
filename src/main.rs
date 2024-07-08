@@ -3,6 +3,7 @@
 
 mod audio;
 mod library;
+mod ui;
 
 use anyhow::Result;
 use library::{Library, Song};
@@ -13,11 +14,15 @@ use std::{
     io::BufReader,
     sync::{Arc, Mutex},
 };
+use ui::{
+    components::song_button, library_controls, library_song_list, playback_controls,
+    playback_queue_display,
+};
 
 use iced::{
     executor,
     widget::{button, column, container, horizontal_space, row, scrollable, text},
-    Application, Command, Element, Length, Settings, Size, Subscription, Theme,
+    Alignment, Application, Command, Element, Length, Settings, Size, Subscription, Theme,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -68,7 +73,7 @@ pub enum Message {
 
 struct Jukebox {
     sink: Option<Sink>,
-    playing: bool,
+    // playing: bool,
     global_settings: GlobalSettings,
     playback_settings: PlaybackSettings,
     music_library: Arc<Mutex<Library>>,
@@ -86,7 +91,7 @@ impl Default for Jukebox {
 
         Self {
             sink: None,
-            playing: false,
+            // playing: false,
             global_settings: GlobalSettings::default(), // TODO fetch
             playback_settings: PlaybackSettings::default(), // TODO fetch
             music_library: Arc::new(Mutex::new(Library::new())),
@@ -128,25 +133,20 @@ impl Jukebox {
     fn play_song_from_queue(&mut self) -> Result<()> {
         let _ = &self.replace_sink()?;
 
-        let (song, mut is_current) = self
-            .playback_queue
-            .lock()
-            .unwrap()
-            .get(self.playback_index)
-            // .front()
-            .unwrap()
-            .clone();
+        if let Some((song, mut is_current)) =
+            self.playback_queue.lock().unwrap().get(self.playback_index)
+        {
+            is_current = true;
 
-        is_current = true;
-
-        if let Some(sink) = &self.sink {
-            sink.append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
-                song.file_path,
-            )?))?);
-            println!(
-                "added song to current sink: {} by {}",
-                song.title, song.artist
-            );
+            if let Some(sink) = &self.sink {
+                sink.append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
+                    &song.file_path,
+                )?))?);
+                println!(
+                    "added song to current sink: {} by {}",
+                    song.title, song.artist
+                );
+            }
         }
 
         Ok(())
@@ -346,57 +346,26 @@ impl Application for Jukebox {
     }
 
     fn view(&self) -> Element<Message> {
-        let play_pause_text = if self.playing { "Pause" } else { "Play" };
+        let left_col = column![
+            playback_controls(),
+            playback_queue_display(self.playback_queue.lock().unwrap().clone())
+        ]
+        .align_items(Alignment::Start);
+        let right_col = column![
+            library_controls(),
+            library_song_list(self.music_library.lock().unwrap().songs.clone())
+        ]
+        .align_items(Alignment::Start);
 
-        let debug_save_load_buttons = row![
-            button("save_to_file").on_press(Message::SaveLibrary),
-            button("load_from_file").on_press(Message::LoadLibrary)
-        ];
-
-        let song_list = self.music_library.lock().unwrap().songs.iter().fold(
-            column![].spacing(5),
-            |column, (_id, song)| {
-                column.push(
-                    button(text(format!(
-                        "{} - {} ({})",
-                        song.title, song.artist, song.duration
-                    )))
-                    .on_press(Message::PickSong(song.id)),
-                )
-            },
-        );
-
-        let queue_list = column![
-            text("Queue"),
-            self.playback_queue.lock().unwrap().iter().fold(
-                column![].spacing(5),
-                |column, (song, is_current)| {
-                    column.push(text(format!(
-                        "{} - {} ({}) : {}",
-                        song.title, song.artist, song.duration, is_current
-                    )))
-                },
-            )
-        ];
-
-        let scan_zone = column![
-            button("scan folder").on_press(Message::Scan),
-            scrollable(song_list).height(Length::Fill)
-        ];
-
-        let controls = row![
-            button("previous song").on_press(Message::PreviousSong),
-            button(play_pause_text).on_press(Message::TogglePlayback),
-            button("next song").on_press(Message::NextSong),
-            button("add test song").on_press(Message::AddTestSongToQueue),
-        ];
-
-        let global_layout = column![controls, debug_save_load_buttons, scan_zone, queue_list];
+        // this should be a row of columns.
+        // let global_layout = row![left_col, right_col];
+        let global_layout = row![left_col, right_col];
 
         container(global_layout)
-            .height(Length::Fill)
-            .width(Length::Fill)
-            .center_y()
+            .height(Length::Shrink)
+            .width(Length::Shrink)
+            // .center_y()
+            // .center_x()
             .into()
     }
 }
