@@ -222,16 +222,6 @@ impl Application for Jukebox {
                 Command::none()
             }
             Message::AddTestSongToQueue => {
-                // let _ = &self
-                //     .add_song_to_sink(Song {
-                //         id: 0,
-                //         title: "test song".to_owned(),
-                //         artist: "test artist".to_owned(),
-                //         duration: 60,
-                //         album_id: None,
-                //         file_path: "./test.ogg".into(),
-                //     })
-                //     .expect("adding song to queue failed");
                 let _ = &self
                     .add_song_to_queue_end(Song {
                         id: 0,
