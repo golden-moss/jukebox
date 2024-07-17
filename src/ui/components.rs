@@ -18,9 +18,9 @@ pub fn centered_text<'a>(string: String) -> Element<'a, Message> {
     .into()
 }
 
-pub fn song_button<'a>(string: String, message: Message) -> Element<'a, Message> {
+pub fn centered_button<'a>(string: String, message: Message) -> Element<'a, Message> {
     container(button(text(string)).on_press(message))
-        // .width(Length::Fill)
+        .width(Length::Fill)
         // .height(Length::Shrink)
         .center_y()
         .into()

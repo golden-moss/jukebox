@@ -1,9 +1,4 @@
-use anyhow::Result;
-use rodio::{source, Decoder, OutputStream, Sink};
-use std::{
-    io::{BufReader, Read, Seek},
-    path::PathBuf,
-};
+use rodio::{OutputStream, Sink};
 
 use crate::PlaybackSettings;
 
@@ -16,8 +11,3 @@ pub fn new_sink(settings: PlaybackSettings) -> Sink {
 
     sink
 }
-
-// pub fn new_source(path: PathBuf) -> Result<Decoder<Read + Seek + 'static>> {
-//     let source = rodio::Decoder::new(BufReader::new(std::fs::File::open(path)?))?;
-//     Ok(source)
-// }

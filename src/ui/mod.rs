@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use components::{centered_text, song_button};
+use components::{centered_button, centered_text};
 use iced::{
     widget::{button, column, container, row, scrollable, text},
     Application, Element, Length,
@@ -12,6 +12,15 @@ pub mod components;
 
 // pub fn ui<'a>() -> Element<'a, Message> {}
 // pub fn ui<'a>() -> Element<'a, Message> {}
+
+pub fn loading_ui<'a>() -> Element<'a, Message> {
+    container(row![centered_text("Loading...".into())])
+        .center_x()
+        .center_y()
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+}
 
 pub fn playback_controls<'a>() -> Element<'a, Message> {
     row![
@@ -62,7 +71,7 @@ pub fn library_controls<'a>() -> Element<'a, Message> {
 
 pub fn library_song_list<'a>(songs: HashMap<u64, Song>) -> Element<'a, Message> {
     scrollable(songs.iter().fold(column![], |column, (_id, song)| {
-        column.push(song_button(
+        column.push(centered_button(
             format!("{} - {} ({})", song.title, song.artist, song.duration),
             Message::PickSong(song.id),
         ))
