@@ -7,13 +7,10 @@ mod ui;
 
 use anyhow::Result;
 use library::{Library, Song};
+use parking_lot::Mutex;
 use rodio::Sink;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::VecDeque,
-    io::BufReader,
-    sync::{Arc, Mutex},
-};
+use std::{collections::VecDeque, io::BufReader, sync::Arc};
 use ui::{
     library_controls, library_song_list, loading_ui, playback_controls, playback_queue_display,
 };
@@ -24,7 +21,7 @@ use iced::{
     Alignment, Application, Command, Element, Length, Settings, Theme,
 };
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct GlobalSettings {
     folder_to_scan: String, // TODO add ability to scan multiple folders
     library_file: String,   // where the serialized library is saved
@@ -70,6 +67,7 @@ pub enum Message {
     LoadComplete(Result<(), String>),
 }
 
+#[derive(Clone)]
 enum UIState {
     Loading,
     Main, //current screen
@@ -78,8 +76,9 @@ enum UIState {
           // Song?(id) // not sure how to best implement
 }
 
+#[derive(Clone)]
 struct Jukebox {
-    sink: Option<Sink>,
+    sink: Arc<Mutex<Option<Sink>>>,
     global_settings: GlobalSettings,
     playback_settings: PlaybackSettings,
     ui_state: UIState,
@@ -91,7 +90,7 @@ struct Jukebox {
 impl Default for Jukebox {
     fn default() -> Self {
         Self {
-            sink: None,
+            sink: Arc::new(Mutex::new(None)),
             global_settings: GlobalSettings::default(), // TODO fetch
             playback_settings: PlaybackSettings::default(), // TODO fetch
             ui_state: UIState::Loading,
@@ -105,7 +104,7 @@ impl Default for Jukebox {
 // Functionality
 impl Jukebox {
     fn toggle_sink_playback(&mut self) {
-        if let Some(sink) = &self.sink {
+        if let sink = &self.sink.lock().as_ref().unwrap() {
             if sink.is_paused() {
                 sink.play();
             } else {
@@ -119,27 +118,22 @@ impl Jukebox {
     }
 
     fn add_song_to_queue_end(&self, song: Song) -> Result<()> {
-        self.playback_queue.lock().unwrap().push_back((song, false));
+        self.playback_queue.lock().push_back((song, false));
         Ok(())
     }
 
     fn add_song_to_queue_start(&self, song: Song) -> Result<()> {
-        self.playback_queue
-            .lock()
-            .unwrap()
-            .push_front((song, false));
+        self.playback_queue.lock().push_front((song, false));
         Ok(())
     }
 
     fn play_song_from_queue(&mut self) -> Result<()> {
         let _ = &self.replace_sink()?;
 
-        if let Some((song, mut _is_current)) =
-            self.playback_queue.lock().unwrap().get(self.playback_index)
-        {
+        if let Some((song, mut _is_current)) = self.playback_queue.lock().get(self.playback_index) {
             _is_current = true;
 
-            if let Some(sink) = &self.sink {
+            if let sink = &self.sink.lock().as_ref().unwrap() {
                 sink.append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
                     &song.file_path,
                 )?))?);
@@ -155,13 +149,13 @@ impl Jukebox {
 
     fn replace_sink(&mut self) -> Result<()> {
         self.kill_sink()?;
-        self.sink = Some(audio::new_sink(self.playback_settings));
+        self.sink = Arc::new(Mutex::new(Some(audio::new_sink(self.playback_settings))));
         Ok(())
     }
 
     fn kill_sink(&mut self) -> Result<()> {
-        if self.sink.is_some() {
-            self.sink = None;
+        if self.sink.lock().as_ref().is_some() {
+            self.sink = Arc::new(Mutex::new(None));
             println!("sink killed");
         }
         Ok(())
@@ -170,7 +164,7 @@ impl Jukebox {
     // fn stop_current_playback(&mut self) -> Result<()> {}
 
     fn next_in_queue(&mut self) -> Result<()> {
-        if self.playback_index < self.playback_queue.lock().unwrap().len() {
+        if self.playback_index < self.playback_queue.lock().len() {
             self.playback_index += 1;
         }
         self.play_song_from_queue()?;
@@ -183,6 +177,17 @@ impl Jukebox {
         }
         self.play_song_from_queue()?;
         Ok(())
+    }
+
+    fn load_library(&self) -> Result<(), String> {
+        let load_path = self.global_settings.library_file.clone();
+        let library = Arc::clone(&self.music_library);
+        Library::read_from_file(&load_path)
+            .map(|new_lib| {
+                let mut lib = library.lock();
+                *lib = new_lib;
+            })
+            .map_err(|e| e.to_string())
     }
 
     // fn read_or_create_config(&mut self, config_path: &str) -> Result<GlobalSettings> {
@@ -205,7 +210,10 @@ impl Application for Jukebox {
 
     fn new(_flags: () /*, settings: GlobalSettings*/) -> (Self, Command<Message>) {
         let app = Self::default();
-        (app, Command::none())
+        (
+            app.clone(),
+            Command::perform(async move { app.load_library() }, Message::LoadComplete),
+        )
     }
 
     fn title(&self) -> String {
@@ -215,15 +223,6 @@ impl Application for Jukebox {
     fn update(&mut self, event: Message) -> Command<Message> {
         match self.ui_state {
             UIState::Loading => match event {
-                Message::TogglePlayback => todo!(),
-                Message::PreviousSong => todo!(),
-                Message::NextSong => todo!(),
-                Message::AddTestSongToQueue => todo!(),
-                Message::Scan => todo!(),
-                Message::ScanComplete(_) => todo!(),
-                Message::PickSong(_) => todo!(),
-                Message::SaveLibrary => todo!(),
-                Message::SaveComplete(_) => todo!(),
                 Message::LoadLibrary => {
                     let load_path = self.global_settings.library_file.clone();
                     let library = Arc::clone(&self.music_library);
@@ -231,7 +230,7 @@ impl Application for Jukebox {
                         async move {
                             Library::read_from_file(&load_path)
                                 .map(|new_lib| {
-                                    let mut lib = library.lock().unwrap();
+                                    let mut lib = library.lock();
                                     *lib = new_lib;
                                 })
                                 .map_err(|e| e.to_string())
@@ -243,18 +242,21 @@ impl Application for Jukebox {
                     match result {
                         Ok(()) => {
                             println!("Library loaded successfully.");
+                            self.ui_state = UIState::Main
                         }
                         Err(e) => {
                             println!("Load failed: {}", e);
+                            self.ui_state = UIState::Main
                         }
                     }
                     Command::none()
                 }
+                _ => Command::none(),
             },
             UIState::Main => {
                 match event {
                     Message::TogglePlayback => {
-                        if self.sink.is_none() {
+                        if self.sink.lock().is_none() {
                             self.play_song_from_queue();
                         } else {
                             self.toggle_sink_playback();
@@ -279,7 +281,7 @@ impl Application for Jukebox {
                         let folder_path = "D:/Music";
                         Command::perform(
                             async move {
-                                let mut lib = library.lock().unwrap();
+                                let mut lib = library.lock();
                                 lib.create_songs_from_folder(&folder_path)
                                     .map_err(|e| e.to_string())
                             },
@@ -303,12 +305,7 @@ impl Application for Jukebox {
                     }
                     Message::PickSong(id) => {
                         self.add_song_to_queue_end(
-                            self.music_library
-                                .lock()
-                                .unwrap()
-                                .get_song(id)
-                                .unwrap()
-                                .clone(),
+                            self.music_library.lock().get_song(id).unwrap().clone(),
                         )
                         .expect("adding song to queue failed");
                         Command::none()
@@ -316,7 +313,7 @@ impl Application for Jukebox {
                     Message::SaveLibrary => {
                         let library = Arc::clone(&self.music_library);
                         let save_path = &self.global_settings.library_file;
-                        let _ = library.lock().unwrap().save_to_file(&save_path);
+                        let _ = library.lock().save_to_file(&save_path);
                         // Command::perform(
                         //     async move {
                         //         let lib = library.lock().unwrap();
@@ -345,7 +342,7 @@ impl Application for Jukebox {
                             async move {
                                 Library::read_from_file(&load_path)
                                     .map(|new_lib| {
-                                        let mut lib = library.lock().unwrap();
+                                        let mut lib = library.lock();
                                         *lib = new_lib;
                                     })
                                     .map_err(|e| e.to_string())
@@ -383,12 +380,12 @@ impl Application for Jukebox {
             UIState::Main => {
                 let left_col = column![
                     playback_controls(),
-                    playback_queue_display(self.playback_queue.lock().unwrap().clone())
+                    playback_queue_display(self.playback_queue.lock().clone())
                 ]
                 .align_items(Alignment::Start);
                 let right_col = column![
                     library_controls(),
-                    library_song_list(self.music_library.lock().unwrap().songs.clone())
+                    library_song_list(self.music_library.lock().songs.clone())
                 ]
                 .align_items(Alignment::Start);
 

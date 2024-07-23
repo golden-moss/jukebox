@@ -20,3 +20,4 @@ anyhow = "1.0.0"
 figment = { version = "0.10", features = ["toml"] }
 toml = "0.8.12"
 walkdir = "2.5.0"
+parking_lot = "0.12"
