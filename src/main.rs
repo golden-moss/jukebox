@@ -159,7 +159,9 @@ impl Jukebox {
     // fn stop_current_playback(&mut self) -> Result<()> {}
 
     fn next_in_queue(&mut self) -> Result<()> {
-        if self.playback_index < self.playback_queue.lock().len() {
+        const PREVENT_SKIP_BEYOND_QUEUE_LENGTH: usize = 1;
+        if self.playback_index < self.playback_queue.lock().len() - PREVENT_SKIP_BEYOND_QUEUE_LENGTH
+        {
             self.playback_index += 1;
         }
         self.play_song_from_queue()?;
