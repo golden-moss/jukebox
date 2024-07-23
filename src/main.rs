@@ -10,7 +10,7 @@ use library::{Library, Song};
 use parking_lot::Mutex;
 use rodio::Sink;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, io::BufReader, sync::Arc};
+use std::{collections::VecDeque, fs, io::BufReader, sync::Arc};
 use ui::{
     library_controls, library_song_list, loading_ui, playback_controls, playback_queue_display,
 };
@@ -58,12 +58,9 @@ pub enum Message {
     PreviousSong,
     NextSong,
     AddTestSongToQueue,
+    PickSong(u64),
     Scan,
     ScanComplete(Result<(), String>),
-    PickSong(u64),
-    SaveLibrary,
-    SaveComplete(Result<(), String>),
-    LoadLibrary,
     LoadComplete(Result<(), String>),
 }
 
@@ -91,7 +88,7 @@ impl Default for Jukebox {
     fn default() -> Self {
         Self {
             sink: Arc::new(Mutex::new(None)),
-            global_settings: GlobalSettings::default(), // TODO fetch
+            global_settings: Self::read_or_create_config(),
             playback_settings: PlaybackSettings::default(), // TODO fetch
             ui_state: UIState::Loading,
             music_library: Arc::new(Mutex::new(Library::new())),
@@ -104,12 +101,10 @@ impl Default for Jukebox {
 // Functionality
 impl Jukebox {
     fn toggle_sink_playback(&mut self) {
-        if let sink = &self.sink.lock().as_ref().unwrap() {
-            if sink.is_paused() {
-                sink.play();
-            } else {
-                sink.pause()
-            }
+        if self.sink.lock().as_ref().unwrap().is_paused() {
+            self.sink.lock().as_ref().unwrap().play();
+        } else {
+            self.sink.lock().as_ref().unwrap().pause()
         }
     }
 
@@ -128,20 +123,19 @@ impl Jukebox {
     }
 
     fn play_song_from_queue(&mut self) -> Result<()> {
-        let _ = &self.replace_sink()?;
+        self.replace_sink()?;
 
         if let Some((song, mut _is_current)) = self.playback_queue.lock().get(self.playback_index) {
             _is_current = true;
 
-            if let sink = &self.sink.lock().as_ref().unwrap() {
-                sink.append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
+            self.sink
+                .lock()
+                .as_ref()
+                .unwrap()
+                .append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
                     &song.file_path,
                 )?))?);
-                println!(
-                    "added song to current sink: {} by {}",
-                    song.title, song.artist
-                );
-            }
+            println!("added song: {} by {}", song.title, song.artist);
         }
 
         Ok(())
@@ -150,6 +144,7 @@ impl Jukebox {
     fn replace_sink(&mut self) -> Result<()> {
         self.kill_sink()?;
         self.sink = Arc::new(Mutex::new(Some(audio::new_sink(self.playback_settings))));
+        println!("sink created");
         Ok(())
     }
 
@@ -190,15 +185,31 @@ impl Jukebox {
             .map_err(|e| e.to_string())
     }
 
-    // fn read_or_create_config(&mut self, config_path: &str) -> Result<GlobalSettings> {
-    //     // TODO check if config file exists, if not create it with defaults, if so read/parse it
-    //     if !Path::new(config_path).exists() {
-    //         let default_settings = toml::to_string(&GlobalSettings::default())?;
-    //         std::fs::write(config_path, default_settings)?;
-    //     }
-    //     let settings: GlobalSettings = Figment::new().merge(Toml::file(config_path)).extract()?;
-    //     Ok(settings)
-    // }
+    fn scan_and_save(&mut self) -> Result<(), String> {
+        //scan
+        let _ = self
+            .music_library
+            .lock()
+            .create_songs_from_folder(&self.global_settings.folder_to_scan)
+            .map_err(|e| return e.to_string());
+        //save
+        let save_path = &self.global_settings.library_file;
+        self.music_library
+            .lock()
+            .save_to_file(&save_path)
+            .map_err(|e| return format!("SaveLibrary Error: {}", e))
+    }
+
+    fn read_or_create_config() -> GlobalSettings {
+        let settings = fs::read_to_string("Settings.toml");
+        match settings {
+            Ok(settings) => toml::from_str(&settings).unwrap_or(GlobalSettings::default()),
+            Err(err) => {
+                println!("No Settings File: {}", err);
+                GlobalSettings::default()
+            }
+        }
+    }
 }
 
 // UI/Iced
@@ -208,7 +219,7 @@ impl Application for Jukebox {
     type Message = Message;
     type Theme = Theme;
 
-    fn new(_flags: () /*, settings: GlobalSettings*/) -> (Self, Command<Message>) {
+    fn new(_flags: ()) -> (Self, Command<Message>) {
         let app = Self::default();
         (
             app.clone(),
@@ -223,21 +234,6 @@ impl Application for Jukebox {
     fn update(&mut self, event: Message) -> Command<Message> {
         match self.ui_state {
             UIState::Loading => match event {
-                Message::LoadLibrary => {
-                    let load_path = self.global_settings.library_file.clone();
-                    let library = Arc::clone(&self.music_library);
-                    Command::perform(
-                        async move {
-                            Library::read_from_file(&load_path)
-                                .map(|new_lib| {
-                                    let mut lib = library.lock();
-                                    *lib = new_lib;
-                                })
-                                .map_err(|e| e.to_string())
-                        },
-                        Message::LoadComplete,
-                    )
-                }
                 Message::LoadComplete(result) => {
                     match result {
                         Ok(()) => {
@@ -253,124 +249,67 @@ impl Application for Jukebox {
                 }
                 _ => Command::none(),
             },
-            UIState::Main => {
-                match event {
-                    Message::TogglePlayback => {
-                        if self.sink.lock().is_none() {
-                            self.play_song_from_queue();
-                        } else {
-                            self.toggle_sink_playback();
-                        }
-                        Command::none()
+            UIState::Main => match event {
+                Message::TogglePlayback => {
+                    if self.sink.lock().is_none() {
+                        let _ = self.play_song_from_queue();
+                    } else {
+                        self.toggle_sink_playback();
                     }
-                    Message::AddTestSongToQueue => {
-                        let _ = &self
-                            .add_song_to_queue_end(Song {
-                                id: 0,
-                                title: "test song".to_owned(),
-                                artist: "test artist".to_owned(),
-                                duration: 60,
-                                album_id: None,
-                                file_path: "./test.ogg".into(),
-                            })
-                            .expect("adding song to queue failed");
-                        Command::none()
-                    }
-                    Message::Scan => {
-                        let library = Arc::clone(&self.music_library);
-                        let folder_path = "D:/Music";
-                        Command::perform(
-                            async move {
-                                let mut lib = library.lock();
-                                lib.create_songs_from_folder(&folder_path)
-                                    .map_err(|e| e.to_string())
-                            },
-                            Message::ScanComplete,
-                        )
-                    }
-                    Message::ScanComplete(result) => {
-                        match result {
-                            Ok(()) => {
-                                // let lib = self.music_library.lock().unwrap();
-                                // let songs = lib.songs.values().cloned().collect();
-                                // self.scan_status =
-                                //     format!("Scan complete. Found {} songs.", self.songs.len());
-                            }
-                            Err(e) => {
-                                // self.scan_status = format!("Scan failed: {}", e);
-                                format!("Scan failed: {}", e);
-                            }
-                        }
-                        Command::none()
-                    }
-                    Message::PickSong(id) => {
-                        self.add_song_to_queue_end(
-                            self.music_library.lock().get_song(id).unwrap().clone(),
-                        )
-                        .expect("adding song to queue failed");
-                        Command::none()
-                    }
-                    Message::SaveLibrary => {
-                        let library = Arc::clone(&self.music_library);
-                        let save_path = &self.global_settings.library_file;
-                        let _ = library.lock().save_to_file(&save_path);
-                        // Command::perform(
-                        //     async move {
-                        //         let lib = library.lock().unwrap();
-                        //         lib.save_to_file(&save_path)
-                        //     },
-                        //     Message::SaveComplete,
-                        // )
-                        Command::none()
-                    }
-                    Message::SaveComplete(result) => {
-                        match result {
-                            Ok(()) => {
-                                // self.scan_status = "Library saved successfully.".to_string();
-                            }
-                            Err(e) => {
-                                // self.scan_status = format!("Save failed: {}", e);
-                                format!("Save failed: {}", e);
-                            }
-                        }
-                        Command::none()
-                    }
-                    Message::LoadLibrary => {
-                        let load_path = self.global_settings.library_file.clone();
-                        let library = Arc::clone(&self.music_library);
-                        Command::perform(
-                            async move {
-                                Library::read_from_file(&load_path)
-                                    .map(|new_lib| {
-                                        let mut lib = library.lock();
-                                        *lib = new_lib;
-                                    })
-                                    .map_err(|e| e.to_string())
-                            },
-                            Message::LoadComplete,
-                        )
-                    }
-                    Message::LoadComplete(result) => {
-                        match result {
-                            Ok(()) => {
-                                println!("Library loaded successfully.");
-                            }
-                            Err(e) => {
-                                println!("Load failed: {}", e);
-                            }
-                        }
-                        Command::none()
-                    }
-                    Message::PreviousSong => {
-                        self.prev_in_queue();
-                        Command::none()
-                    }
-                    Message::NextSong => {
-                        self.next_in_queue();
-                        Command::none()
-                    }
+                    Command::none()
                 }
-            }
+                Message::AddTestSongToQueue => {
+                    self.add_song_to_queue_end(Song {
+                        id: 0,
+                        title: "test song".to_owned(),
+                        artist: "test artist".to_owned(),
+                        duration: 60,
+                        album_id: None,
+                        file_path: "./test.ogg".into(),
+                    })
+                    .expect("adding song to queue failed");
+                    Command::none()
+                }
+                Message::Scan => {
+                    let mut jb = self.clone();
+                    Command::perform(async move { jb.scan_and_save() }, Message::ScanComplete)
+                }
+                Message::ScanComplete(result) => {
+                    match result {
+                        Ok(()) => {}
+                        Err(e) => {
+                            format!("Scan failed: {}", e);
+                        }
+                    }
+                    Command::none()
+                }
+                Message::PickSong(id) => {
+                    self.add_song_to_queue_end(
+                        self.music_library.lock().get_song(id).unwrap().clone(),
+                    )
+                    .expect("adding song to queue failed");
+                    Command::none()
+                }
+                Message::LoadComplete(result) => {
+                    match result {
+                        Ok(()) => {
+                            println!("Library loaded successfully.");
+                        }
+                        Err(e) => {
+                            println!("Load failed: {}", e);
+                        }
+                    }
+                    Command::none()
+                }
+                Message::PreviousSong => {
+                    let _ = self.prev_in_queue();
+                    Command::none()
+                }
+                Message::NextSong => {
+                    let _ = self.next_in_queue();
+                    Command::none()
+                }
+            },
         }
     }
 
@@ -396,8 +335,6 @@ impl Application for Jukebox {
                 container(global_layout)
                     .height(Length::Shrink)
                     .width(Length::Shrink)
-                    // .center_y()
-                    // .center_x()
                     .into()
             }
         }
@@ -405,7 +342,5 @@ impl Application for Jukebox {
 }
 
 pub fn main() -> iced::Result {
-    // let settings = read_or_create_config("Settings.toml");
-
     Jukebox::run(Settings::default())
 }

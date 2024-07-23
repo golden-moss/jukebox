@@ -49,14 +49,8 @@ pub fn playback_queue_display<'a>(queue: VecDeque<(Song, bool)>) -> Element<'a, 
 }
 
 pub fn library_controls<'a>() -> Element<'a, Message> {
-    let save_load_buttons = row![
-        button("save_to_file").on_press(Message::SaveLibrary),
-        button("load_from_file").on_press(Message::LoadLibrary)
-    ];
-
     let layout = column![
         centered_text("library controls".into()),
-        save_load_buttons,
         button("scan folder").on_press(Message::Scan)
     ];
 
