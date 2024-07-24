@@ -125,8 +125,12 @@ impl Jukebox {
     fn play_song_from_queue(&mut self) -> Result<()> {
         self.replace_sink()?;
 
-        if let Some((song, mut _is_current)) = self.playback_queue.lock().get(self.playback_index) {
-            _is_current = true;
+        for (_song, current) in self.playback_queue.lock().iter_mut() {
+            *current = false;
+        }
+
+        if let Some((song, _is_current)) = self.playback_queue.lock().get_mut(self.playback_index) {
+            *_is_current = true;
 
             self.sink
                 .lock()
