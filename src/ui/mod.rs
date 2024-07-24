@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use components::{centered_button, centered_text};
+use components::{centered_button, centered_text, theme_selector};
 use iced::{
     widget::{button, column, container, row, scrollable, text},
     Application, Element, Length,
@@ -51,7 +51,7 @@ pub fn playback_queue_display<'a>(queue: VecDeque<(Song, bool)>) -> Element<'a, 
 pub fn library_controls<'a>() -> Element<'a, Message> {
     let layout = column![
         centered_text("library controls".into()),
-        button("scan folder").on_press(Message::Scan)
+        button("scan folder").on_press(Message::Scan),
     ];
 
     container(layout)

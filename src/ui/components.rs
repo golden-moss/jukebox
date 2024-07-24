@@ -1,7 +1,7 @@
 use iced::{
     alignment,
-    widget::{button, container, text},
-    Element, Length,
+    widget::{button, column, container, pick_list, text},
+    Element, Length, Theme,
 };
 
 use crate::Message;
@@ -24,4 +24,13 @@ pub fn centered_button<'a>(string: String, message: Message) -> Element<'a, Mess
         // .height(Length::Shrink)
         .center_y()
         .into()
+}
+
+pub fn theme_selector<'a>(current_theme: &'a Theme) -> Element<'a, Message> {
+    let choose_theme = column![
+        text("Theme:"),
+        pick_list(Theme::ALL, Some(current_theme), Message::ThemeChanged).width(Length::Fill),
+    ]
+    .spacing(10);
+    container(choose_theme).into()
 }

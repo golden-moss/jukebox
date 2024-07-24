@@ -52,8 +52,13 @@ impl Default for PlaybackSettings {
     }
 }
 
+// #[derive(Debug, Clone)]
+// enum Theme {
+//     Dracula,
+// }
+
 #[derive(Debug, Clone)]
-pub enum Message {
+enum Message {
     TogglePlayback,
     PreviousSong,
     NextSong,
@@ -62,6 +67,7 @@ pub enum Message {
     Scan,
     ScanComplete(Result<(), String>),
     LoadComplete(Result<(), String>),
+    ThemeChanged(Theme),
 }
 
 #[derive(Clone)]
@@ -79,6 +85,7 @@ struct Jukebox {
     global_settings: GlobalSettings,
     playback_settings: PlaybackSettings,
     ui_state: UIState,
+    theme: Theme,
     music_library: Arc<Mutex<Library>>,
     playback_queue: Arc<Mutex<VecDeque<(Song, bool)>>>,
     playback_index: usize,
@@ -91,6 +98,7 @@ impl Default for Jukebox {
             global_settings: Self::read_or_create_config(),
             playback_settings: PlaybackSettings::default(), // TODO fetch
             ui_state: UIState::Loading,
+            theme: Theme::Light,
             music_library: Arc::new(Mutex::new(Library::new())),
             playback_queue: Arc::new(Mutex::new(VecDeque::new())),
             playback_index: 0,
@@ -318,6 +326,10 @@ impl Application for Jukebox {
                     let _ = self.next_in_queue();
                     Command::none()
                 }
+                Message::ThemeChanged(theme) => {
+                    self.theme = theme;
+                    Command::none()
+                }
             },
         }
     }
@@ -333,6 +345,7 @@ impl Application for Jukebox {
                 .align_items(Alignment::Start);
                 let right_col = column![
                     library_controls(),
+                    ui::components::theme_selector(&self.theme),
                     library_song_list(self.music_library.lock().songs.clone())
                 ]
                 .align_items(Alignment::Start);
