@@ -1,2 +1,2 @@
 folder_to_scan = "D:/Music"
-volume = 1.0
+library_file = "library.toml"

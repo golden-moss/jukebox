@@ -10,16 +10,11 @@ use library::{Library, Song};
 use parking_lot::Mutex;
 use rodio::Sink;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, fs, io::BufReader, sync::Arc};
-use ui::{
-    library_controls, library_song_list, loading_ui, playback_controls, playback_queue_display,
-};
+// use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, PlatformConfig};
+use std::{collections::VecDeque, fs, io::BufReader, sync::Arc, time::Duration};
+use ui::{loading_ui, main_ui, settings_ui};
 
-use iced::{
-    executor,
-    widget::{column, container, row},
-    Alignment, Application, Command, Element, Length, Settings, Theme,
-};
+use iced::{executor, Application, Command, Element, Settings, Subscription, Theme};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct GlobalSettings {
@@ -68,15 +63,19 @@ enum Message {
     ScanComplete(Result<(), String>),
     LoadComplete(Result<(), String>),
     ThemeChanged(Theme),
+    SaveSettings(GlobalSettings),
+    ChangeUI(UIState),
+    TickUpdate,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum UIState {
     Loading,
     Main, //current screen
-          // Artist(id) // not sure how to best implement
-          // Album(id) // not sure how to best implement
-          // Song?(id) // not sure how to best implement
+    Settings,
+    // Artist(id) // not sure how to best implement
+    // Album(id) // not sure how to best implement
+    // Song?(id) // not sure how to best implement
 }
 
 #[derive(Clone)]
@@ -170,6 +169,32 @@ impl Jukebox {
 
     // fn stop_current_playback(&mut self) -> Result<()> {}
 
+    fn update_time(&mut self) {
+        let time_remaining = self
+            .playback_queue
+            .lock()
+            .get(self.playback_index)
+            .unwrap_or(&(Song::default(), false))
+            .0
+            .duration
+            .as_secs()
+            - self
+                .sink
+                .lock()
+                .as_ref()
+                .unwrap_or(&Sink::new_idle().0)
+                .get_pos()
+                .as_secs();
+        println!("song duration remaining: {:?}", time_remaining);
+        if self.sink.lock().is_some() {
+            if !self.sink.lock().as_ref().unwrap().is_paused()
+                && time_remaining <= Duration::ZERO.as_secs()
+            {
+                self.next_in_queue();
+            }
+        }
+    }
+
     fn next_in_queue(&mut self) -> Result<()> {
         const PREVENT_SKIP_BEYOND_QUEUE_LENGTH: usize = 1;
         if self.playback_queue.lock().len() == 0 {
@@ -244,8 +269,22 @@ impl Application for Jukebox {
         )
     }
 
+    fn theme(&self) -> Theme {
+        Theme::Dark
+    }
+
     fn title(&self) -> String {
         String::from("Jukebox")
+    }
+
+    fn subscription(&self) -> Subscription<Self::Message> {
+        // TODO get key input (handle media keys)
+        const TICK_DURATION: f32 = 0.1;
+
+        let time =
+            iced::time::every(Duration::from_secs_f32(TICK_DURATION)).map(|_| Message::TickUpdate);
+
+        Subscription::batch([time])
     }
 
     fn update(&mut self, event: Message) -> Command<Message> {
@@ -267,6 +306,10 @@ impl Application for Jukebox {
                 _ => Command::none(),
             },
             UIState::Main => match event {
+                Message::TickUpdate => {
+                    self.update_time();
+                    Command::none()
+                }
                 Message::TogglePlayback => {
                     if self.sink.lock().is_none() {
                         let _ = self.play_song_from_queue();
@@ -280,7 +323,7 @@ impl Application for Jukebox {
                         id: 0,
                         title: "test song".to_owned(),
                         artist: "test artist".to_owned(),
-                        duration: 60,
+                        duration: Duration::from_secs(60),
                         album_id: None,
                         file_path: "./test.ogg".into(),
                     })
@@ -330,6 +373,22 @@ impl Application for Jukebox {
                     self.theme = theme;
                     Command::none()
                 }
+                Message::ChangeUI(ui_state) => {
+                    self.ui_state = ui_state;
+                    Command::none()
+                }
+                _ => Command::none(),
+            },
+            UIState::Settings => match event {
+                Message::SaveSettings(new_settings) => {
+                    self.global_settings = new_settings;
+                    Command::none()
+                }
+                Message::ChangeUI(ui_state) => {
+                    self.ui_state = ui_state;
+                    Command::none()
+                }
+                _ => Command::none(),
             },
         }
     }
@@ -337,28 +396,8 @@ impl Application for Jukebox {
     fn view(&self) -> Element<Message> {
         match self.ui_state {
             UIState::Loading => loading_ui(),
-            UIState::Main => {
-                let left_col = column![
-                    playback_controls(),
-                    playback_queue_display(self.playback_queue.lock().clone())
-                ]
-                .align_items(Alignment::Start);
-                let right_col = column![
-                    library_controls(),
-                    ui::components::theme_selector(&self.theme),
-                    library_song_list(self.music_library.lock().songs.clone())
-                ]
-                .align_items(Alignment::Start);
-
-                // this should be a row of columns.
-                // let global_layout = row![left_col, right_col];
-                let global_layout = row![left_col, right_col];
-
-                container(global_layout)
-                    .height(Length::Shrink)
-                    .width(Length::Shrink)
-                    .into()
-            }
+            UIState::Main => main_ui(self.clone()),
+            UIState::Settings => settings_ui(self.global_settings.clone()),
         }
     }
 }

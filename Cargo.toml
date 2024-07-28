@@ -11,13 +11,15 @@ rust-version = "1.78"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-iced = { version = "0.12.1", features = ["image", "svg"] }
+iced = { version = "0.12.1", features = ["image", "svg", "tokio"] }
+tokio = { version = "1", features = ["full"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 lofty = "0.20.0"
-rodio = "0.19.0"
+rodio = { version = "0.19.0" }
 anyhow = "1.0.0"
 figment = { version = "0.10", features = ["toml"] }
 toml = "0.8.12"
 walkdir = "2.5.0"
 parking_lot = "0.12"
+souvlaki = "0.7.3"

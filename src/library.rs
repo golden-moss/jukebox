@@ -10,6 +10,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
+    time::Duration,
 };
 use walkdir::WalkDir;
 
@@ -18,7 +19,7 @@ pub struct Song {
     pub id: u64,
     pub title: String,
     pub artist: String,
-    pub duration: u32, // in seconds
+    pub duration: Duration, // in seconds
     pub album_id: Option<u64>,
     pub file_path: PathBuf,
 }
@@ -39,6 +40,19 @@ pub struct Library {
     pub album_songs: HashMap<u64, Vec<u64>>, // album_id -> [song_ids]
     pub next_song_id: u64,                   // used when creating/importing new songs
     pub next_album_id: u64,                  // used when creating/importing new albums
+}
+
+impl Default for Song {
+    fn default() -> Self {
+        Song {
+            id: 0,
+            title: "default title".into(),
+            artist: "Default Artist".into(),
+            duration: Duration::ZERO,
+            album_id: None,
+            file_path: PathBuf::new(),
+        }
+    }
 }
 
 // impl Song {
@@ -131,7 +145,7 @@ impl Library {
         let year = tag.year().unwrap_or(0) as u16;
         let genre = tag.genre().unwrap_or(unknown_tag.clone()).to_string();
 
-        let duration = tagged_file.properties().duration().as_secs() as u32;
+        let duration = tagged_file.properties().duration();
 
         let album_id = self.get_or_create_album(album_title, artist.clone(), year, genre);
 
