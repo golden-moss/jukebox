@@ -181,19 +181,17 @@ impl Jukebox {
             .unwrap_or(&(Song::default(), false))
             .0
             .duration
-            .as_secs()
+            // .as_secs()
             - self
                 .sink
                 .lock()
                 .as_ref()
                 .unwrap_or(&Sink::new_idle().0)
-                .get_pos()
-                .as_secs();
-        println!("song duration remaining: {:?}", time_remaining);
+                .get_pos();
+        // .as_secs();
+        // println!("song duration remaining: {:?}", time_remaining);
         if self.sink.lock().is_some() {
-            if !self.sink.lock().as_ref().unwrap().is_paused()
-                && time_remaining <= Duration::ZERO.as_secs()
-            {
+            if !self.sink.lock().as_ref().unwrap().is_paused() && time_remaining <= Duration::ZERO {
                 self.next_in_queue();
             }
         }
@@ -233,6 +231,7 @@ impl Jukebox {
 
     fn scan_and_save(&mut self) -> Result<(), String> {
         //scan
+        self.music_library = Arc::new(Mutex::new(Library::new()));
         let _ = self
             .music_library
             .lock()
@@ -335,7 +334,7 @@ impl Application for Jukebox {
                 }
                 Message::ScanComplete(result) => {
                     match result {
-                        Ok(()) => {}
+                        Ok(()) => self.load_library().unwrap(),
                         Err(e) => {
                             format!("Scan failed: {}", e);
                         }

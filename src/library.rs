@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use anyhow::Result;
 use lofty::{
     file::{AudioFile, TaggedFileExt},
@@ -9,7 +10,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     time::Duration,
 };
 use uuid::Uuid;
@@ -57,34 +58,41 @@ impl Song {
     pub fn new_from_file(file_path: PathBuf) -> Result<Self> {
         let tagged_file = Probe::open(&file_path)?.read()?;
 
-        let tag = tagged_file
+        match tagged_file
             .primary_tag()
             .or_else(|| tagged_file.first_tag())
-            .unwrap();
+        {
+            Some(tag) => {
+                let id = Uuid::new_v4();
+                let unknown_tag = std::borrow::Cow::Borrowed("Unknown");
+                let title = tag.title().unwrap_or(unknown_tag.clone()).to_string();
+                let artist = tag.artist().unwrap_or(unknown_tag.clone()).to_string();
+                let album_title = tag.album().unwrap_or(unknown_tag.clone()).to_string(); //TODO deal with Album
+                let year = tag.year().unwrap_or(0) as u16;
+                let genre = tag.genre().unwrap_or(unknown_tag.clone()).to_string();
 
-        let id = Uuid::new_v4();
-        let unknown_tag = std::borrow::Cow::Borrowed("Unknown");
-        let title = tag.title().unwrap_or(unknown_tag.clone()).to_string();
-        let artist = tag.artist().unwrap_or(unknown_tag.clone()).to_string();
-        let album_title = tag.album().unwrap_or(unknown_tag.clone()).to_string(); //TODO deal with Album
-        let year = tag.year().unwrap_or(0) as u16;
-        let genre = tag.genre().unwrap_or(unknown_tag.clone()).to_string();
+                let duration = tagged_file.properties().duration();
 
-        let duration = tagged_file.properties().duration();
+                // let album_id = Album::get_or_create_from_song(id).id;
+                // let album_id = None; // TODO for now, set all to None and apply id later, not quite sure how to deal with creating Albums right now
 
-        // let album_id = Album::get_or_create_from_song(id).id;
-        // let album_id = None; // TODO for now, set all to None and apply id later, not quite sure how to deal with creating Albums right now
-
-        Ok(Song {
-            id,
-            title,
-            artist,
-            duration,
-            // album_id,
-            file_path,
-            year,
-            genre,
-        })
+                Ok(Song {
+                    id,
+                    title,
+                    artist,
+                    duration,
+                    // album_id,
+                    file_path,
+                    year,
+                    genre,
+                })
+            }
+            None => {
+                // TODO handle valid songs that have no tags
+                // Err(anyhow!("not an audio file"))
+                Ok(Song::default())
+            }
+        }
     }
 }
 
@@ -131,11 +139,30 @@ impl Library {
     }
 
     pub fn import_dir(&mut self, folder_path: &str) -> Result<()> {
-        // TODO check for existing dupes! based on filepath, duration, other tags, and ideally AcoustID but I have *no* clue how to implement that.
-        for entry in WalkDir::new(folder_path).into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file() {
-                println!("{:?}", entry.file_name());
-                self.add_song(Song::new_from_file(entry.into_path())?)?;
+        // TODO check for existing dupes based on filepath, duration, other tags, and ideally AcoustID but I have *no* clue how to implement that.
+        for entry in WalkDir::new(folder_path) {
+            match entry {
+                Ok(file) => {
+                    // println!("entry: {:?}", file);
+                    // println!("{:?}", entry.file_name());
+                    if file.file_type().is_file() {
+                        match file.clone().into_path().extension() {
+                            Some(extension) => {
+                                if extension == "flac"
+                                    || extension == "ogg"
+                                    || extension == "mp3"
+                                    || extension == "wav"
+                                    || extension == "acc"
+                                {
+                                    println!("ADDING SONG: {:?}", file.clone().file_name());
+                                    self.add_song(Song::new_from_file(file.into_path())?)?;
+                                }
+                            }
+                            None => (),
+                        }
+                    }
+                }
+                Err(e) => println!("{}", e),
             }
         }
         Ok(())
