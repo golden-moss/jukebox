@@ -8,6 +8,7 @@ use iced::{
     widget::{button, column, container, pick_list, row, scrollable, text, text_input},
     Element, Length, Theme,
 };
+use uuid::Uuid;
 
 use crate::library::Song;
 use crate::{Message, UIState};
@@ -73,7 +74,7 @@ pub fn library_controls<'a>() -> Element<'a, Message> {
         .into()
 }
 
-pub fn library_song_list<'a>(songs: HashMap<u64, Song>) -> Element<'a, Message> {
+pub fn library_song_list<'a>(songs: HashMap<Uuid, Song>) -> Element<'a, Message> {
     scrollable(songs.iter().fold(column![], |column, (_id, song)| {
         column.push(centered_button(
             format!("{} - {} ({:?})", song.title, song.artist, song.duration),

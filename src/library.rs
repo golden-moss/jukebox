@@ -12,175 +12,139 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+use uuid::Uuid;
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Song {
-    pub id: u64,
+    pub id: Uuid,
     pub title: String,
-    pub artist: String,
+    pub artist: String, // TODO refer to actual artists (and deal with multiple)
     pub duration: Duration, // in seconds
-    pub album_id: Option<u64>,
+    // pub album_id: Option<Uuid>,
     pub file_path: PathBuf,
+    pub year: u16,
+    pub genre: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Album {
-    pub id: u64,
+    pub id: Uuid,
     pub title: String,
-    pub artist: String,
+    pub artist: Vec<Uuid>,
+    pub songs: Vec<Song>, // Vec (or HashMap?) of `Song.id`s - NO EMPTY ALBUMS (hope this is not an edge case lmao)
     pub year: u16,
+    pub genre: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct Artist {
+    pub id: Uuid,
+    pub name: String,
+    pub albums: Option<Vec<Uuid>>, // Vec (or HashMap?) of `Album.id`s
+    pub songs: Option<Vec<Uuid>>,  // Vec (or HashMap?) of `Song.id`s
     pub genre: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Library {
-    pub songs: HashMap<u64, Song>,
-    pub albums: HashMap<u64, Album>,
-    pub album_songs: HashMap<u64, Vec<u64>>, // album_id -> [song_ids]
-    pub next_song_id: u64,                   // used when creating/importing new songs
-    pub next_album_id: u64,                  // used when creating/importing new albums
+    pub songs: HashMap<Uuid, Song>,
+    pub albums: HashMap<Uuid, Album>,
+    // pub album_songs: HashMap<Uuid, Vec<Uuid>>, // album_id -> [song_ids] //TODO get rid of this, use Album instead
 }
 
-impl Default for Song {
-    fn default() -> Self {
-        Song {
-            id: 0,
-            title: "default title".into(),
-            artist: "Default Artist".into(),
-            duration: Duration::ZERO,
-            album_id: None,
-            file_path: PathBuf::new(),
-        }
+impl Song {
+    pub fn new_from_file(file_path: PathBuf) -> Result<Self> {
+        let tagged_file = Probe::open(&file_path)?.read()?;
+
+        let tag = tagged_file
+            .primary_tag()
+            .or_else(|| tagged_file.first_tag())
+            .unwrap();
+
+        let id = Uuid::new_v4();
+        let unknown_tag = std::borrow::Cow::Borrowed("Unknown");
+        let title = tag.title().unwrap_or(unknown_tag.clone()).to_string();
+        let artist = tag.artist().unwrap_or(unknown_tag.clone()).to_string();
+        let album_title = tag.album().unwrap_or(unknown_tag.clone()).to_string(); //TODO deal with Album
+        let year = tag.year().unwrap_or(0) as u16;
+        let genre = tag.genre().unwrap_or(unknown_tag.clone()).to_string();
+
+        let duration = tagged_file.properties().duration();
+
+        // let album_id = Album::get_or_create_from_song(id).id;
+        // let album_id = None; // TODO for now, set all to None and apply id later, not quite sure how to deal with creating Albums right now
+
+        Ok(Song {
+            id,
+            title,
+            artist,
+            duration,
+            // album_id,
+            file_path,
+            year,
+            genre,
+        })
     }
 }
 
-// impl Song {
-//   pub fn new(id) -> Self {
-//     Song { id: id, title: (), artist: (), duration: (), album_id: () }
-//   }
-// }
+impl Album {
+    pub fn new(id: Uuid) -> Self {
+        Album {
+            id,
+            title: todo!(),
+            artist: todo!(),
+            songs: todo!(),
+            year: todo!(),
+            genre: todo!(),
+        }
+    }
+
+    pub fn get_or_create_from_song(song_id: Uuid) -> Self {
+        todo!()
+    }
+
+    pub fn get_album_songs(&self) -> Vec<Song> {
+        self.songs.clone()
+    }
+}
 
 impl Library {
     pub fn new() -> Self {
         Library {
             songs: HashMap::new(),
             albums: HashMap::new(),
-            album_songs: HashMap::new(),
-            next_song_id: 1,
-            next_album_id: 1,
+            // album_songs: HashMap::new(),
         }
     }
 
-    fn add_song(&mut self, song: Song) {
-        if let Some(album_id) = song.album_id {
-            self.album_songs.entry(album_id).or_default().push(song.id);
-        }
-        self.songs.insert(song.id, song);
+    fn add_song(&mut self, song: Song) -> Result<()> {
+        self.songs.insert(song.id.clone(), song);
+
+        Ok(())
     }
 
-    fn add_album(&mut self, album: Album) -> u64 {
-        let id = self.next_album_id;
-        self.next_album_id += 1;
-        self.albums.insert(id, album);
-        id
+    fn add_album(&mut self, album: Album) -> Result<()> {
+        self.albums.insert(album.id.clone(), album);
+
+        Ok(())
     }
 
-    pub fn get_song(&self, id: u64) -> Option<&Song> {
-        self.songs.get(&id)
-    }
-
-    pub fn get_album(&self, id: u64) -> Option<&Album> {
-        self.albums.get(&id)
-    }
-
-    pub fn get_or_create_album(
-        &mut self,
-        title: String,
-        artist: String,
-        year: u16,
-        genre: String,
-    ) -> u64 {
-        for (id, album) in &self.albums {
-            if album.title == title && album.artist == artist {
-                return *id;
-            }
-        }
-
-        let new_album = Album {
-            id: self.next_album_id,
-            title,
-            artist,
-            year,
-            genre,
-        };
-        self.add_album(new_album)
-    }
-
-    pub fn create_songs_from_folder(
-        &mut self,
-        folder_path: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn import_dir(&mut self, folder_path: &str) -> Result<()> {
+        // TODO check for existing dupes! based on filepath, duration, other tags, and ideally AcoustID but I have *no* clue how to implement that.
         for entry in WalkDir::new(folder_path).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_file() {
-                if let Some(song) = self.create_song_from_file(entry.path()) {
-                    self.add_song(song);
-                }
+                println!("{:?}", entry.file_name());
+                self.add_song(Song::new_from_file(entry.into_path())?)?;
             }
         }
         Ok(())
     }
 
-    pub fn create_song_from_file(&mut self, file_path: &Path) -> Option<Song> {
-        let tagged_file = Probe::open(file_path).ok()?.read().ok()?;
-
-        let tag = tagged_file
-            .primary_tag()
-            .or_else(|| tagged_file.first_tag())?;
-
-        let unknown_tag = std::borrow::Cow::Borrowed("Unknown");
-        let title = tag.title().unwrap_or(unknown_tag.clone()).to_string();
-        let artist = tag.artist().unwrap_or(unknown_tag.clone()).to_string();
-        let album_title = tag.album().unwrap_or(unknown_tag.clone()).to_string();
-        let year = tag.year().unwrap_or(0) as u16;
-        let genre = tag.genre().unwrap_or(unknown_tag.clone()).to_string();
-
-        let duration = tagged_file.properties().duration();
-
-        let album_id = self.get_or_create_album(album_title, artist.clone(), year, genre);
-
-        let song = Song {
-            id: self.next_song_id,
-            title,
-            artist,
-            duration,
-            album_id: Some(album_id),
-            file_path: file_path.to_owned(),
-        };
-
-        self.next_song_id += 1;
-
-        println!("{:#?}", song);
-
-        Some(song)
-    }
-
-    pub fn get_album_songs(&self, album_id: u64) -> Vec<&Song> {
-        self.album_songs
-            .get(&album_id)
-            .map(|song_ids| {
-                song_ids
-                    .iter()
-                    .filter_map(|id| self.songs.get(id))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
     pub fn save_to_file(&self, file_path: &str) -> Result<()> {
-        let json = serde_json::to_string(self)?;
+        let toml = toml::to_string(self)?;
         let mut file = File::create(file_path)?;
-        file.write_all(json.as_bytes())?;
+        file.write_all(toml.as_bytes())?;
         Ok(())
     }
 
@@ -188,7 +152,7 @@ impl Library {
         let mut file = File::open(file_path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        let library: Library = serde_json::from_str(&contents)?;
+        let library: Library = toml::from_str(&contents)?;
         Ok(library)
     }
 }

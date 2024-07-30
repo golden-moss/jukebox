@@ -10,8 +10,12 @@ use library::{Library, Song};
 use parking_lot::Mutex;
 use rodio::Sink;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 // use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, PlatformConfig};
-use std::{collections::VecDeque, fs, io::BufReader, sync::Arc, time::Duration};
+use std::{
+    collections::VecDeque, fs, io::BufReader, path::PathBuf, str::FromStr, sync::Arc,
+    time::Duration,
+};
 use ui::{loading_ui, main_ui, settings_ui};
 
 use iced::{executor, Application, Command, Element, Settings, Subscription, Theme};
@@ -58,7 +62,7 @@ enum Message {
     PreviousSong,
     NextSong,
     AddTestSongToQueue,
-    PickSong(u64),
+    PickSong(Uuid),
     Scan,
     ScanComplete(Result<(), String>),
     LoadComplete(Result<(), String>),
@@ -232,7 +236,7 @@ impl Jukebox {
         let _ = self
             .music_library
             .lock()
-            .create_songs_from_folder(&self.global_settings.folder_to_scan)
+            .import_dir(&self.global_settings.folder_to_scan)
             .map_err(|e| return e.to_string());
         //save
         let save_path = &self.global_settings.library_file;
@@ -319,14 +323,9 @@ impl Application for Jukebox {
                     Command::none()
                 }
                 Message::AddTestSongToQueue => {
-                    self.add_song_to_queue_end(Song {
-                        id: 0,
-                        title: "test song".to_owned(),
-                        artist: "test artist".to_owned(),
-                        duration: Duration::from_secs(60),
-                        album_id: None,
-                        file_path: "./test.ogg".into(),
-                    })
+                    self.add_song_to_queue_end(
+                        Song::new_from_file(PathBuf::from_str("./test.ogg").unwrap()).unwrap(),
+                    )
                     .expect("adding song to queue failed");
                     Command::none()
                 }
@@ -345,7 +344,7 @@ impl Application for Jukebox {
                 }
                 Message::PickSong(id) => {
                     self.add_song_to_queue_end(
-                        self.music_library.lock().get_song(id).unwrap().clone(),
+                        self.music_library.lock().songs.get(&id).unwrap().clone(),
                     )
                     .expect("adding song to queue failed");
                     Command::none()
