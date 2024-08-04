@@ -121,11 +121,11 @@ impl Album {
     pub fn get_or_create_from_song(song: &Song) -> Self {
         Album {
             id: Uuid::new_v4(),
-            title: song.album_title.unwrap(),
-            artist: song.artist,
+            title: song.clone().album_title.unwrap().to_owned(),
+            artist: song.artist.clone(),
             songs: Vec::new(),
-            year: (),
-            genre: (),
+            year: song.year,
+            genre: song.genre.to_owned(),
         }
     }
 
