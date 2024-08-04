@@ -52,7 +52,7 @@ pub fn playback_queue_display<'a>(queue: VecDeque<(Song, bool)>) -> Element<'a, 
             .fold(column![].spacing(0.25), |column, (song, is_current)| {
                 column.push(text(format!(
                     "{} - {} ({:?}) : {}",
-                    song.title, song.artist, song.duration, is_current
+                    song.title, song.artist.name, song.duration, is_current
                 )))
             },)
     ]
@@ -77,7 +77,10 @@ pub fn library_controls<'a>() -> Element<'a, Message> {
 pub fn library_song_list<'a>(songs: HashMap<Uuid, Song>) -> Element<'a, Message> {
     scrollable(songs.iter().fold(column![], |column, (_id, song)| {
         column.push(centered_button(
-            format!("{} - {} ({:?})", song.title, song.artist, song.duration),
+            format!(
+                "{} - {} ({:?})",
+                song.title, song.artist.name, song.duration
+            ),
             Message::PickSong(song.id),
         ))
     }))

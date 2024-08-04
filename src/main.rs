@@ -150,7 +150,7 @@ impl Jukebox {
                 .append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
                     &song.file_path,
                 )?))?);
-            println!("added song: {} by {}", song.title, song.artist);
+            println!("added song: {} by {}", song.title, song.artist.name);
         }
 
         Ok(())
