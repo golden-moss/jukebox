@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use anyhow::Result;
 use lofty::{
     file::{AudioFile, TaggedFileExt},
@@ -19,7 +18,6 @@ use walkdir::WalkDir;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Song {
-    pub id: Uuid,
     pub title: String,
     // pub artist: String, // TODO refer to actual artists (and deal with multiple)
     pub artist: Artist,
@@ -32,7 +30,6 @@ pub struct Song {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Album {
-    pub id: Uuid,
     pub title: String,
     // pub artist: Vec<Uuid>, //TODO implement support for multiple artists
     pub artist: Artist,
@@ -43,23 +40,16 @@ pub struct Album {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Artist {
-    pub id: Uuid,
     pub name: String,
+    pub albums: Option<Vec<Uuid>>,
+    pub songs: Option<Vec<Uuid>>,
 }
-// #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-// pub struct Artist {
-//     pub id: Uuid,
-//     pub name: String,
-//     pub albums: Option<Vec<Uuid>>, // Vec (or HashMap?) of `Album.id`s
-//     pub songs: Option<Vec<Uuid>>,  // Vec (or HashMap?) of `Song.id`s
-//     pub genre: String,
-// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Library {
     pub songs: HashMap<Uuid, Song>,
     pub albums: HashMap<Uuid, Album>,
-    // pub album_songs: HashMap<Uuid, Vec<Uuid>>, // album_id -> [song_ids] //TODO get rid of this, use Album instead
+    pub artists: HashMap<Uuid, Artist>,
 }
 
 impl Song {
@@ -71,7 +61,6 @@ impl Song {
             .or_else(|| tagged_file.first_tag())
         {
             Some(tag) => {
-                let id = Uuid::new_v4();
                 let unknown_tag = std::borrow::Cow::Borrowed("Unknown");
                 let title = tag.title().unwrap_or(unknown_tag.clone()).to_string();
                 let album_title = Album::only_title(tag.album());
@@ -80,14 +69,7 @@ impl Song {
                 let genre = tag.genre().unwrap_or(unknown_tag.clone()).to_string();
                 let duration = tagged_file.properties().duration();
 
-                // TODO check if Album exists (by name and artist)
-                // TODO create if does not, append if does
-
-                // let album_id = Album::get_or_create_from_song(id).id;
-                // let album_id = None; // TODO for now, set all to None and apply id later, not quite sure how to deal with creating Albums right now
-
                 Ok(Song {
-                    id,
                     title,
                     album_title,
                     artist: Artist::new(artist),
@@ -99,7 +81,6 @@ impl Song {
             }
             None => {
                 // TODO handle valid songs that have no tags
-                // Err(anyhow!("not an audio file"))
                 Ok(Song::default())
             }
         }
@@ -109,7 +90,6 @@ impl Song {
 impl Album {
     pub fn new(title: String, artist: Artist, year: u16, genre: String) -> Self {
         Album {
-            id: Uuid::new_v4(),
             title,
             artist,
             songs: Vec::new(),
@@ -118,9 +98,8 @@ impl Album {
         }
     }
 
-    pub fn get_or_create_from_song(song: &Song) -> Self {
+    pub fn create_from_song(song: &Song) -> Self {
         Album {
-            id: Uuid::new_v4(),
             title: song.clone().album_title.unwrap().to_owned(),
             artist: song.artist.clone(),
             songs: Vec::new(),
@@ -144,8 +123,9 @@ impl Album {
 impl Artist {
     pub fn new(name: String) -> Self {
         Artist {
-            id: Uuid::new_v4(),
             name,
+            albums: None,
+            songs: None,
         }
     }
 }
@@ -155,30 +135,44 @@ impl Library {
         Library {
             songs: HashMap::new(),
             albums: HashMap::new(),
-            // album_songs: HashMap::new(),
+            artists: HashMap::new(),
         }
     }
 
     fn add_song(&mut self, song: Song) -> Result<()> {
-        self.songs.insert(song.id.clone(), song);
+        // TODO check for duplicates (by name, possibly album, and artist)
+        self.songs.insert(Uuid::new_v4(), song);
 
         Ok(())
     }
 
     fn add_album(&mut self, album: Album) -> Result<()> {
-        self.albums.insert(album.id.clone(), album);
+        // TODO check if Album exists (by name and artist)
+        // TODO create if does not, append if does
+
+        // let album_id = Album::get_or_create_from_song(id).id;
+        // let album_id = None; // TODO for now, set all to None and apply id later, not quite sure how to deal with creating Albums right now
+
+        // self.albums.insert(album.id.clone(), album);
+        self.albums.insert(Uuid::new_v4(), album);
+
+        Ok(())
+    }
+
+    fn add_artist(&mut self, artist: Artist) -> Result<()> {
+        // TODO check for duplicates
+        self.artists.insert(Uuid::new_v4(), artist);
 
         Ok(())
     }
 
     pub fn import_dir(&mut self, folder_path: &str) -> Result<()> {
-        // TODO check for existing dupes based on filepath, duration, other tags, and ideally AcoustID but I have *no* clue how to implement that.
         for entry in WalkDir::new(folder_path) {
+            // TODO check for existing dupes based on filepath, duration, other tags, and ideally AcoustID but I have *no* clue how to implement that.
             match entry {
                 Ok(file) => {
                     // println!("entry: {:?}", file);
-                    // println!("{:?}", entry.file_name());
-                    if !file.file_type().is_file() {
+                    if file.file_type().is_file() {
                         match file.clone().into_path().extension() {
                             Some(extension) => {
                                 if extension == "flac"
@@ -200,6 +194,9 @@ impl Library {
         }
 
         // TODO sort into Albums?
+        // for (_id, song) in self.songs.clone() {
+        //     self.add_album(Album::create_from_song(&song))?;
+        // }
 
         Ok(())
     }

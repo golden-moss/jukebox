@@ -75,13 +75,13 @@ pub fn library_controls<'a>() -> Element<'a, Message> {
 }
 
 pub fn library_song_list<'a>(songs: HashMap<Uuid, Song>) -> Element<'a, Message> {
-    scrollable(songs.iter().fold(column![], |column, (_id, song)| {
+    scrollable(songs.iter().fold(column![], |column, (id, song)| {
         column.push(centered_button(
             format!(
                 "{} - {} ({:?})",
                 song.title, song.artist.name, song.duration
             ),
-            Message::PickSong(song.id),
+            Message::PickSong(*id),
         ))
     }))
     .height(Length::Fill)

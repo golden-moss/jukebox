@@ -330,6 +330,7 @@ impl Application for Jukebox {
                 }
                 Message::Scan => {
                     let mut jb = self.clone();
+                    println!("scanning...");
                     Command::perform(async move { jb.scan_and_save() }, Message::ScanComplete)
                 }
                 Message::ScanComplete(result) => {
