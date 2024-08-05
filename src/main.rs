@@ -66,7 +66,6 @@ enum Message {
     Scan,
     ScanComplete(Result<(), String>),
     LoadComplete(Result<(), String>),
-    ThemeChanged(Theme),
     SaveSettings(GlobalSettings),
     ChangeUI(UIState),
     TickUpdate,
@@ -366,10 +365,6 @@ impl Application for Jukebox {
                 }
                 Message::NextSong => {
                     let _ = self.next_in_queue();
-                    Command::none()
-                }
-                Message::ThemeChanged(theme) => {
-                    self.theme = theme;
                     Command::none()
                 }
                 Message::ChangeUI(ui_state) => {

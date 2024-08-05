@@ -88,14 +88,14 @@ pub fn library_song_list<'a>(songs: HashMap<Uuid, Song>) -> Element<'a, Message>
     .into()
 }
 
-pub fn theme_selector<'a>(current_theme: &'a Theme) -> Element<'a, Message> {
-    let choose_theme = column![
-        text("Theme:"),
-        pick_list(Theme::ALL, Some(current_theme), Message::ThemeChanged).width(Length::Fill),
-    ]
-    .spacing(10);
-    container(choose_theme).into()
-}
+// pub fn theme_selector<'a>(current_theme: &'a Theme) -> Element<'a, Message> {
+//     let choose_theme = column![
+//         text("Theme:"),
+//         pick_list(Theme::ALL, Some(current_theme), Message::ThemeChanged).width(Length::Fill),
+//     ]
+//     .spacing(10);
+//     container(choose_theme).into()
+// }
 
 pub fn change_ui<'a>() -> Element<'a, Message> {
     let button_box = row![

@@ -1,6 +1,6 @@
 use components::{
     centered_button, centered_text, change_ui, library_controls, library_song_list,
-    playback_controls, playback_queue_display, theme_selector,
+    playback_controls, playback_queue_display,
 };
 use iced::widget::text_input;
 /// REQUIRED for macros despite being "unused"
