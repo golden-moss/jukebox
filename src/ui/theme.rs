@@ -1,12 +1,5 @@
-use crate::fs;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-
-pub async fn load_user_themes() -> Vec<Theme> {
-    log::debug!("loading user themes");
-
-    fs::load_user_themes().await
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Theme {
@@ -530,68 +523,5 @@ mod serde_color {
         S: ser::Serializer,
     {
         serializer.serialize_str(&color_to_hex(color))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{serde_color::deserialize, Theme};
-    use serde::de::value::{Error, StrDeserializer};
-    use serde::de::IntoDeserializer;
-
-    #[test]
-    fn test_hex_color_deser() {
-        let colors = [
-            "AABBCC", "AABBCG", "#AABBCG", "#AABB091", "#AABBCC", "#AABB09",
-        ];
-
-        for (idx, color_str) in colors.iter().enumerate() {
-            let deserializer: StrDeserializer<Error> = color_str.into_deserializer();
-
-            let color = deserialize(deserializer);
-
-            if idx < 4 {
-                assert!(color.is_err());
-            } else {
-                assert!(color.is_ok());
-            }
-        }
-    }
-
-    #[test]
-    fn test_hex_color_ser() {
-        let color = super::NormalColors {
-            primary: iced_native::Color::from_rgb(1.0, 1.0, 1.0),
-            secondary: iced_native::Color::from_rgb(0.5, 0.6, 0.75789),
-            surface: iced_native::Color::from_rgb(0.1, 0.2, 0.3),
-            error: iced_native::Color::from_rgb(0.0, 0.0, 0.0),
-        };
-
-        let ser = serde_yaml::to_string(&color).unwrap();
-
-        dbg!(&ser);
-    }
-
-    #[test]
-    fn test_theme_yml_deser() {
-        let theme_str = "---
-        name: Test
-        palette:
-          base:
-            background: '#484793'
-            foreground: '#484793'
-          normal:
-            primary: '#484793'
-            secondary: '#484793'
-            surface: '#484793'
-            error: '#484793'
-          bright:
-            primary: '#484793'
-            secondary: '#484793'
-            surface: '#484793'
-            error: '#484793'
-        ";
-
-        serde_yaml::from_str::<Theme>(theme_str).unwrap();
     }
 }

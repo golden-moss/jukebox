@@ -15,7 +15,6 @@ use crate::Message;
 use crate::{GlobalSettings, Jukebox};
 
 mod components;
-mod styles;
 mod theme;
 
 // pub fn ui<'a>() -> Element<'a, Message> {}
