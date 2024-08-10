@@ -33,17 +33,7 @@ pub fn centered_button<'a>(string: String, message: Message) -> Element<'a, Mess
         .into()
 }
 
-pub fn playback_controls<'a>() -> Element<'a, Message> {
-    row![
-        button("previous song").on_press(Message::PreviousSong),
-        button("play or pause").on_press(Message::TogglePlayback),
-        button("next song").on_press(Message::NextSong),
-    ]
-    .spacing(2)
-    .into()
-}
-
-pub fn playback_zone<'a>(now_playing: Song) -> Element<'a, Message> {
+pub fn playback_controls<'a>(now_playing: Song) -> Element<'a, Message> {
     column![
         text(now_playing.title).size(22),
         row![
@@ -59,7 +49,12 @@ pub fn playback_zone<'a>(now_playing: Song) -> Element<'a, Message> {
             .size(16)
         ]
         .spacing(8),
-        playback_controls()
+        row![
+            button("previous song").on_press(Message::PreviousSong),
+            button("play or pause").on_press(Message::TogglePlayback),
+            button("next song").on_press(Message::NextSong),
+        ]
+        .spacing(2)
     ]
     .width(Length::Fill)
     .align_items(Alignment::Center)
@@ -68,7 +63,7 @@ pub fn playback_zone<'a>(now_playing: Song) -> Element<'a, Message> {
     .into()
 }
 
-pub fn playback_queue_display<'a>(queue: VecDeque<(Song, bool)>) -> Element<'a, Message> {
+pub fn playback_queue<'a>(queue: VecDeque<(Song, bool)>) -> Element<'a, Message> {
     column![
         centered_text("Queue".into()),
         queue
@@ -83,6 +78,9 @@ pub fn playback_queue_display<'a>(queue: VecDeque<(Song, bool)>) -> Element<'a, 
                 )))
             },)
     ]
+    .padding(12)
+    .max_width(300)
+    .spacing(4)
     .into()
 }
 
@@ -106,18 +104,23 @@ pub fn library_controls<'a>() -> Element<'a, Message> {
 }
 
 pub fn library_song_list<'a>(songs: HashMap<Uuid, Song>) -> Element<'a, Message> {
-    scrollable(songs.iter().fold(column![], |column, (id, song)| {
-        column.push(centered_button(
-            format!(
-                "{} - {} ({:?})",
-                song.title,
-                song.artists.first().unwrap_or(&Artist::default()).name,
-                song.duration
-            ),
-            Message::PickSong(*id),
-        ))
-    }))
+    container(scrollable(songs.iter().fold(
+        column![],
+        |column, (id, song)| {
+            column.push(centered_button(
+                format!(
+                    "{} - {} ({:?})",
+                    song.title,
+                    song.artists.first().unwrap_or(&Artist::default()).name,
+                    song.duration
+                ),
+                Message::PickSong(*id),
+            ))
+        },
+    )))
     .height(Length::Fill)
+    .padding(12)
+    .max_width(700)
     .into()
 }
 

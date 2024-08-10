@@ -1,6 +1,6 @@
 use components::{
     centered_button, centered_text, change_ui, library_controls, library_song_list,
-    playback_controls, playback_queue_display, playback_zone,
+    playback_controls, playback_queue,
 };
 use iced::widget::text_input;
 /// REQUIRED for macros despite being "unused"
@@ -15,6 +15,8 @@ use crate::Message;
 use crate::{GlobalSettings, Jukebox};
 
 mod components;
+mod styles;
+mod theme;
 
 // pub fn ui<'a>() -> Element<'a, Message> {}
 
@@ -37,11 +39,8 @@ pub fn main_ui<'a>(jb: Jukebox) -> Element<'a, Message> {
 
     let navbar = change_ui();
 
-    let left_col = column![
-        playback_controls(),
-        playback_queue_display(jb.playback_queue.lock().clone())
-    ]
-    .align_items(Alignment::Start);
+    let left_col =
+        column![playback_queue(jb.playback_queue.lock().clone())].align_items(Alignment::Start);
     let right_col = column![
         library_controls(),
         // theme_selector(&jb.theme),
@@ -49,7 +48,7 @@ pub fn main_ui<'a>(jb: Jukebox) -> Element<'a, Message> {
     ]
     .align_items(Alignment::Start);
 
-    let global_layout = column![row![left_col, right_col], playback_zone(now_playing)];
+    let global_layout = column![row![left_col, right_col], playback_controls(now_playing)];
 
     container(column![navbar, global_layout])
         .height(Length::Shrink)
