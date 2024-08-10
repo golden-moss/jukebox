@@ -20,9 +20,9 @@ use walkdir::WalkDir;
 pub struct Song {
     pub title: String,
     // pub artist: String, // TODO refer to actual artists (and deal with multiple)
-    pub artist: Artist,
+    pub artists: Vec<Artist>,
     pub duration: Duration,
-    pub album_title: Option<String>,
+    pub album: Option<Album>,
     pub file_path: PathBuf,
     pub year: u16,
     pub genre: String,
@@ -30,19 +30,21 @@ pub struct Song {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Album {
+    pub id: Uuid,
     pub title: String,
     // pub artist: Vec<Uuid>, //TODO implement support for multiple artists
     pub artist: Artist,
-    pub songs: Vec<Song>, // Vec (or HashMap?) of `Song.id`s - NO EMPTY ALBUMS (hope this is not an edge case lmao)
-    pub year: u16,
-    pub genre: String,
+    // pub songs: Vec<Song>, // Vec (or HashMap?) of `Song.id`s - NO EMPTY ALBUMS (hope this is not an edge case lmao)
+    // pub year: u16,
+    // pub genre: String,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Artist {
+    pub id: Uuid,
     pub name: String,
-    pub albums: Option<Vec<Uuid>>,
-    pub songs: Option<Vec<Uuid>>,
+    // pub albums: Option<Vec<Uuid>>,
+    // pub songs: Option<Vec<Uuid>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,66 +55,79 @@ pub struct Library {
 }
 
 impl Song {
-    pub fn new_from_file(file_path: PathBuf) -> Result<Self> {
-        let tagged_file = Probe::open(&file_path)?.read()?;
+    pub fn new(file_path: PathBuf) -> Self {
+        match Probe::open(&file_path) {
+            Ok(tagged_file) => {
+                match tagged_file.read() {
+                    Ok(tagged_file) => {
+                        match tagged_file
+                            .primary_tag()
+                            .or_else(|| tagged_file.first_tag())
+                        {
+                            Some(tag) => {
+                                let unknown_tag = std::borrow::Cow::Borrowed("Unknown");
+                                let tag_title =
+                                    tag.title().unwrap_or(unknown_tag.clone()).to_string();
+                                let tag_artist =
+                                    tag.artist().unwrap_or(unknown_tag.clone()).to_string();
+                                let tag_year = tag.year().unwrap_or(0) as u16;
+                                let tag_genre =
+                                    tag.genre().unwrap_or(unknown_tag.clone()).to_string();
+                                let tag_duration = tagged_file.properties().duration();
 
-        match tagged_file
-            .primary_tag()
-            .or_else(|| tagged_file.first_tag())
-        {
-            Some(tag) => {
-                let unknown_tag = std::borrow::Cow::Borrowed("Unknown");
-                let title = tag.title().unwrap_or(unknown_tag.clone()).to_string();
-                let album_title = Album::only_title(tag.album());
-                let artist = tag.artist().unwrap_or(unknown_tag.clone()).to_string();
-                let year = tag.year().unwrap_or(0) as u16;
-                let genre = tag.genre().unwrap_or(unknown_tag.clone()).to_string();
-                let duration = tagged_file.properties().duration();
+                                let artist = Artist::new(tag_artist.clone());
 
-                Ok(Song {
-                    title,
-                    album_title,
-                    artist: Artist::new(artist),
-                    duration,
-                    file_path,
-                    year,
-                    genre,
-                })
+                                let album = Album::new(
+                                    Album::try_to_get_title(tag.album()),
+                                    artist.clone(),
+                                );
+
+                                Song {
+                                    title: tag_title,
+                                    album,
+                                    artists: vec![artist],
+                                    duration: tag_duration,
+                                    file_path,
+                                    year: tag_year,
+                                    genre: tag_genre,
+                                }
+                            }
+                            None => {
+                                // TODO handle valid songs that have no tags
+                                // TODO this is a shitty hack, properly deal with errors
+                                Song::default()
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("{:?}", e);
+                        // TODO this is a shitty hack, properly deal with errors
+                        Song::default()
+                    }
+                }
             }
-            None => {
-                // TODO handle valid songs that have no tags
-                Ok(Song::default())
+            Err(e) => {
+                println!("{:?}", e);
+                // TODO this is a shitty hack, properly deal with errors
+                Song::default()
             }
         }
     }
 }
 
 impl Album {
-    pub fn new(title: String, artist: Artist, year: u16, genre: String) -> Self {
-        Album {
-            title,
-            artist,
-            songs: Vec::new(),
-            year,
-            genre,
+    pub fn new(title: Option<String>, artist: Artist) -> Option<Self> {
+        match title {
+            Some(title) => Some(Album {
+                id: Uuid::new_v4(),
+                title,
+                artist,
+            }),
+            None => None,
         }
     }
 
-    pub fn create_from_song(song: &Song) -> Self {
-        Album {
-            title: song.clone().album_title.unwrap().to_owned(),
-            artist: song.artist.clone(),
-            songs: Vec::new(),
-            year: song.year,
-            genre: song.genre.to_owned(),
-        }
-    }
-
-    pub fn get_album_songs(&self) -> Vec<Song> {
-        self.songs.clone()
-    }
-
-    pub fn only_title(maybe_album: Option<Cow<str>>) -> Option<String> {
+    pub fn try_to_get_title(maybe_album: Option<Cow<str>>) -> Option<String> {
         match maybe_album {
             Some(title) => Some(title.to_string()),
             None => None,
@@ -123,9 +138,8 @@ impl Album {
 impl Artist {
     pub fn new(name: String) -> Self {
         Artist {
+            id: Uuid::new_v4(),
             name,
-            albums: None,
-            songs: None,
         }
     }
 }
@@ -146,25 +160,25 @@ impl Library {
         Ok(())
     }
 
-    fn add_album(&mut self, album: Album) -> Result<()> {
-        // TODO check if Album exists (by name and artist)
-        // TODO create if does not, append if does
+    // fn add_album(&mut self, album: Album) -> Result<()> {
+    //     // TODO check if Album exists (by name and artist)
+    //     // TODO create if does not, append if does
 
-        // let album_id = Album::get_or_create_from_song(id).id;
-        // let album_id = None; // TODO for now, set all to None and apply id later, not quite sure how to deal with creating Albums right now
+    //     // let album_id = Album::get_or_create_from_song(id).id;
+    //     // let album_id = None; // TODO for now, set all to None and apply id later, not quite sure how to deal with creating Albums right now
 
-        // self.albums.insert(album.id.clone(), album);
-        self.albums.insert(Uuid::new_v4(), album);
+    //     // self.albums.insert(album.id.clone(), album);
+    //     self.albums.insert(Uuid::new_v4(), album);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    fn add_artist(&mut self, artist: Artist) -> Result<()> {
-        // TODO check for duplicates
-        self.artists.insert(Uuid::new_v4(), artist);
+    // fn add_artist(&mut self, artist: Artist) -> Result<()> {
+    //     // TODO check for duplicates
+    //     self.artists.insert(Uuid::new_v4(), artist);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     pub fn import_dir(&mut self, folder_path: &str) -> Result<()> {
         for entry in WalkDir::new(folder_path) {
@@ -182,7 +196,7 @@ impl Library {
                                     || extension == "acc"
                                 {
                                     println!("ADDING SONG: {:?}", file.clone().file_name());
-                                    self.add_song(Song::new_from_file(file.into_path())?)?;
+                                    self.add_song(Song::new(file.into_path()))?;
                                 }
                             }
                             None => (),
@@ -192,11 +206,6 @@ impl Library {
                 Err(e) => println!("{}", e),
             }
         }
-
-        // TODO sort into Albums?
-        // for (_id, song) in self.songs.clone() {
-        //     self.add_album(Album::create_from_song(&song))?;
-        // }
 
         Ok(())
     }

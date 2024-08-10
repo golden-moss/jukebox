@@ -23,6 +23,8 @@ toml = "0.8.12"
 walkdir = "2.5.0"
 parking_lot = "0.12"
 souvlaki = "0.7.3"
+sqlx = { version = "0.7", features = ["runtime-tokio", "tls-rustls"] }
+
 [dependencies.uuid]
 version = "1.10.0"
 features = [

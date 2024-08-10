@@ -149,7 +149,11 @@ impl Jukebox {
                 .append(rodio::Decoder::new(BufReader::new(std::fs::File::open(
                     &song.file_path,
                 )?))?);
-            println!("added song: {} by {}", song.title, song.artist.name);
+            println!(
+                "added song: {} by {}",
+                song.title,
+                song.artists.first().unwrap().name
+            );
         }
 
         Ok(())
@@ -281,7 +285,7 @@ impl Application for Jukebox {
 
     fn subscription(&self) -> Subscription<Self::Message> {
         // TODO get key input (handle media keys)
-        const TICK_DURATION: f32 = 0.1;
+        const TICK_DURATION: f32 = 0.01;
 
         let time =
             iced::time::every(Duration::from_secs_f32(TICK_DURATION)).map(|_| Message::TickUpdate);
@@ -321,10 +325,8 @@ impl Application for Jukebox {
                     Command::none()
                 }
                 Message::AddTestSongToQueue => {
-                    self.add_song_to_queue_end(
-                        Song::new_from_file(PathBuf::from_str("./test.ogg").unwrap()).unwrap(),
-                    )
-                    .expect("adding song to queue failed");
+                    self.add_song_to_queue_end(Song::new(PathBuf::from_str("./test.ogg").unwrap()))
+                        .expect("adding song to queue failed");
                     Command::none()
                 }
                 Message::Scan => {
@@ -396,6 +398,7 @@ impl Application for Jukebox {
     }
 }
 
-pub fn main() -> iced::Result {
+#[tokio::main]
+async fn main() -> iced::Result {
     Jukebox::run(Settings::default())
 }
