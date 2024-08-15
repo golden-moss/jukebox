@@ -33,6 +33,31 @@ pub fn centered_button<'a>(string: String, message: Message) -> Element<'a, Mess
         .into()
 }
 
+/// Text
+/// Body font size: 16px
+/// Line height: 1.6 * font size
+pub fn h1<'a>(string: String) -> Element<'a, Message> {
+    text(string).size().line_height().into()
+}
+pub fn h2<'a>(string: String) -> Element<'a, Message> {
+    text(string).size().line_height().into()
+}
+pub fn h3<'a>(string: String) -> Element<'a, Message> {
+    text(string).size().line_height().into()
+}
+pub fn h4<'a>(string: String) -> Element<'a, Message> {
+    text(string).size().line_height().into()
+}
+pub fn h5<'a>(string: String) -> Element<'a, Message> {
+    text(string).size().line_height().into()
+}
+pub fn h6<'a>(string: String) -> Element<'a, Message> {
+    text(string).size().line_height().into()
+}
+pub fn paragraph<'a>(string: String) -> Element<'a, Message> {
+    text(string).size(16).line_height().into()
+}
+
 pub fn playback_controls<'a>(now_playing: Song) -> Element<'a, Message> {
     column![
         text(now_playing.title).size(22),
