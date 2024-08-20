@@ -13,16 +13,12 @@ use uuid::Uuid;
 use crate::library::{Artist, Song};
 use crate::{Message, UIState};
 
-pub fn centered_text<'a>(string: String) -> Element<'a, Message> {
-    container(
-        text(string)
-            .horizontal_alignment(alignment::Horizontal::Center)
-            .size(50),
-    )
-    // .width(Length::Fill)
-    // .height(Length::Fill)
-    .center_y()
-    .into()
+pub fn centered_title<'a>(string: String) -> Element<'a, Message> {
+    container(text_h1(string))
+        // .width(Length::Fill)
+        // .height(Length::Fill)
+        .center_y()
+        .into()
 }
 
 pub fn centered_button<'a>(string: String, message: Message) -> Element<'a, Message> {
@@ -36,34 +32,34 @@ pub fn centered_button<'a>(string: String, message: Message) -> Element<'a, Mess
 /// Text
 /// Body font size: 16px
 /// Line height: 1.6 * font size
-pub fn h1<'a>(string: String) -> Element<'a, Message> {
-    text(string).size().line_height().into()
+pub fn text_h1<'a>(string: String) -> Element<'a, Message> {
+    text(string).size(48).line_height(1.6).into()
 }
-pub fn h2<'a>(string: String) -> Element<'a, Message> {
-    text(string).size().line_height().into()
+pub fn text_h2<'a>(string: String) -> Element<'a, Message> {
+    text(string).size(42).line_height(1.6).into()
 }
-pub fn h3<'a>(string: String) -> Element<'a, Message> {
-    text(string).size().line_height().into()
+pub fn text_h3<'a>(string: String) -> Element<'a, Message> {
+    text(string).size(38).line_height(1.6).into()
 }
-pub fn h4<'a>(string: String) -> Element<'a, Message> {
-    text(string).size().line_height().into()
+pub fn text_h4<'a>(string: String) -> Element<'a, Message> {
+    text(string).size(34).line_height(1.6).into()
 }
-pub fn h5<'a>(string: String) -> Element<'a, Message> {
-    text(string).size().line_height().into()
+pub fn text_h5<'a>(string: String) -> Element<'a, Message> {
+    text(string).size(28).line_height(1.6).into()
 }
-pub fn h6<'a>(string: String) -> Element<'a, Message> {
-    text(string).size().line_height().into()
+pub fn text_h6<'a>(string: String) -> Element<'a, Message> {
+    text(string).size(22).line_height(1.6).into()
 }
-pub fn paragraph<'a>(string: String) -> Element<'a, Message> {
-    text(string).size(16).line_height().into()
+pub fn text_p<'a>(string: String) -> Element<'a, Message> {
+    text(string).size(16).line_height(1.6).into()
 }
 
 pub fn playback_controls<'a>(now_playing: Song) -> Element<'a, Message> {
     column![
-        text(now_playing.title).size(22),
+        text_h4(now_playing.title),
         row![
-            text(now_playing.album.unwrap_or_default().title).size(16),
-            text(
+            text_p(now_playing.album.unwrap_or_default().title),
+            text_p(
                 now_playing
                     .artists
                     .first()
@@ -71,7 +67,6 @@ pub fn playback_controls<'a>(now_playing: Song) -> Element<'a, Message> {
                     .name
                     .clone()
             )
-            .size(16)
         ]
         .spacing(8),
         row![
@@ -90,11 +85,11 @@ pub fn playback_controls<'a>(now_playing: Song) -> Element<'a, Message> {
 
 pub fn playback_queue<'a>(queue: VecDeque<(Song, bool)>) -> Element<'a, Message> {
     column![
-        centered_text("Queue".into()),
+        centered_title("Queue".into()),
         queue
             .iter()
             .fold(column![].spacing(0.25), |column, (song, is_current)| {
-                column.push(text(format!(
+                column.push(text_p(format!(
                     "{} - {} ({:?}) : {}",
                     song.title,
                     song.artists.first().unwrap_or(&Artist::default()).name,
@@ -111,7 +106,7 @@ pub fn playback_queue<'a>(queue: VecDeque<(Song, bool)>) -> Element<'a, Message>
 
 pub fn library_controls<'a>() -> Element<'a, Message> {
     let layout = column![
-        centered_text("library controls".into()),
+        centered_title("library controls".into()),
         row![
             button("scan folder").on_press(Message::Scan),
             button("add test song").on_press(Message::AddTestSongToQueue),

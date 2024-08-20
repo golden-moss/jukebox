@@ -1,6 +1,6 @@
 use components::{
-    centered_button, centered_text, change_ui, library_controls, library_song_list,
-    playback_controls, playback_queue,
+    centered_button, centered_title, change_ui, library_controls, library_song_list,
+    playback_controls, playback_queue, text_h5,
 };
 use iced::widget::text_input;
 /// REQUIRED for macros despite being "unused"
@@ -20,7 +20,7 @@ mod theme;
 // pub fn ui<'a>() -> Element<'a, Message> {}
 
 pub fn loading_ui<'a>() -> Element<'a, Message> {
-    container(row![centered_text("Loading...".into())])
+    container(row![centered_title("Loading...".into())])
         .center_x()
         .center_y()
         .width(Length::Fill)
@@ -64,14 +64,14 @@ pub fn settings_ui<'a>(settings: GlobalSettings) -> Element<'a, Message> {
     let items = scrollable(
         column![]
             .push(row![
-                text("Folder to scan:"),
+                text_h5("Folder to scan:".into()),
                 text_input("settings.folder_to_scan", &new_settings.folder_to_scan)
                     // .on_input(Message::SaveSettings(new_settings))
                     .padding(10)
                     .size(20),
             ])
             .push(row![
-                text("Library File:"),
+                text_h5("Library File:".into()),
                 text_input("settings.library_file", &new_settings.library_file)
                     // .on_input(Message::SaveSettings(new_settings))
                     .padding(10)
