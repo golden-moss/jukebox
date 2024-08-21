@@ -1,24 +1,30 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 mod audio;
 mod library;
 mod ui;
+mod views;
 
 use anyhow::Result;
+use gpui::prelude::*;
+use gpui::*;
 use library::{Library, Song};
 use parking_lot::Mutex;
 use rodio::Sink;
 use serde::{Deserialize, Serialize};
+use std::{collections::VecDeque, fs, io::BufReader, sync::Arc, time::Duration};
 use uuid::Uuid;
-// use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, PlatformConfig};
-use std::{
-    collections::VecDeque, fs, io::BufReader, path::PathBuf, str::FromStr, sync::Arc,
-    time::Duration,
-};
-use ui::{loading_ui, main_ui, settings_ui};
+use views::{loading_ui::LoadingUI, main_ui::MainUI, settings_ui::SettingsUI};
 
-use iced::{executor, Application, Command, Element, Settings, Subscription, Theme};
+actions!(
+    application,
+    [
+        TogglePlayback,
+        PreviousSong,
+        NextSong,
+        AddTestSongToQueue,
+        Scan,
+        TickUpdate,
+    ]
+);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct GlobalSettings {
@@ -52,24 +58,19 @@ impl Default for PlaybackSettings {
 }
 
 // #[derive(Debug, Clone)]
-// enum Theme {
-//     Dracula,
+// enum Message {
+//     TogglePlayback,
+//     PreviousSong,
+//     NextSong,
+//     AddTestSongToQueue,
+//     PickSong(Uuid),
+//     Scan,
+//     ScanComplete(Result<(), String>),
+//     LoadComplete(Result<(), String>),
+//     SaveSettings(GlobalSettings),
+//     ChangeUI(UIState),
+//     TickUpdate,
 // }
-
-#[derive(Debug, Clone)]
-enum Message {
-    TogglePlayback,
-    PreviousSong,
-    NextSong,
-    AddTestSongToQueue,
-    PickSong(Uuid),
-    Scan,
-    ScanComplete(Result<(), String>),
-    LoadComplete(Result<(), String>),
-    SaveSettings(GlobalSettings),
-    ChangeUI(UIState),
-    TickUpdate,
-}
 
 #[derive(Debug, Clone)]
 enum UIState {
@@ -87,7 +88,6 @@ struct Jukebox {
     global_settings: GlobalSettings,
     playback_settings: PlaybackSettings,
     ui_state: UIState,
-    theme: Theme,
     music_library: Arc<Mutex<Library>>,
     playback_queue: Arc<Mutex<VecDeque<(Song, bool)>>>,
     playback_index: usize,
@@ -100,7 +100,6 @@ impl Default for Jukebox {
             global_settings: Self::read_or_create_config(),
             playback_settings: PlaybackSettings::default(), // TODO fetch
             ui_state: UIState::Loading,
-            theme: Theme::Light,
             music_library: Arc::new(Mutex::new(Library::new())),
             playback_queue: Arc::new(Mutex::new(VecDeque::new())),
             playback_index: 0,
@@ -110,6 +109,18 @@ impl Default for Jukebox {
 
 // Functionality
 impl Jukebox {
+    // fn init() -> Self {
+    //     Jukebox {
+    //         sink: Arc::new(Mutex::new(None)),
+    //         global_settings: Self::read_or_create_config(),
+    //         playback_settings: PlaybackSettings::default(), // TODO fetch
+    //         ui_state: UIState::Loading,
+    //         music_library: Arc::new(Mutex::new(Library::new())),
+    //         playback_queue: Arc::new(Mutex::new(VecDeque::new())),
+    //         playback_index: 0,
+    //     }
+    // }
+
     fn toggle_sink_playback(&mut self) {
         if self.sink.lock().as_ref().unwrap().is_paused() {
             self.sink.lock().as_ref().unwrap().play();
@@ -260,145 +271,183 @@ impl Jukebox {
     }
 }
 
-// UI/Iced
-impl Application for Jukebox {
-    type Executor = executor::Default;
-    type Flags = ();
-    type Message = Message;
-    type Theme = Theme;
+impl Render for Jukebox {
+    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+        cx.set_window_title("jukebox");
+        // cx.
 
-    fn new(_flags: ()) -> (Self, Command<Message>) {
-        let app = Self::default();
-        (
-            app.clone(),
-            Command::perform(async move { app.load_library() }, Message::LoadComplete),
+        match self.ui_state {
+            UIState::Loading => {
+                ui::root().child(cx.new_view(|cx| LoadingUI {
+                    focus_handle: cx.focus_handle(),
+                    // jukebox: self.clone(),
+                }))
+            }
+            UIState::Main => ui::root().child(cx.new_view(|cx| MainUI {
+                focus_handle: cx.focus_handle(),
+                jukebox: self.clone(),
+            })),
+            UIState::Settings => ui::root().child(cx.new_view(|cx| SettingsUI {
+                focus_handle: cx.focus_handle(),
+                jukebox: self.clone(),
+            })),
+        }
+    }
+}
+
+fn main() {
+    App::new().run(|cx: &mut AppContext| {
+        let bounds = Bounds::centered(None, size(px(300.0), px(300.0)), cx);
+
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                ..Default::default()
+            },
+            |cx| {
+                cx.new_view(|_cx| Jukebox {
+                    ..Jukebox::default()
+                })
+            },
         )
-    }
-
-    fn theme(&self) -> Theme {
-        Theme::Dark
-    }
-
-    fn title(&self) -> String {
-        String::from("Jukebox")
-    }
-
-    fn subscription(&self) -> Subscription<Self::Message> {
-        // TODO get key input (handle media keys)
-        const TICK_DURATION: f32 = 0.01;
-
-        let time =
-            iced::time::every(Duration::from_secs_f32(TICK_DURATION)).map(|_| Message::TickUpdate);
-
-        Subscription::batch([time])
-    }
-
-    fn update(&mut self, event: Message) -> Command<Message> {
-        match self.ui_state {
-            UIState::Loading => match event {
-                Message::LoadComplete(result) => {
-                    match result {
-                        Ok(()) => {
-                            println!("Library loaded successfully.");
-                            self.ui_state = UIState::Main
-                        }
-                        Err(e) => {
-                            println!("Load failed: {}", e);
-                            self.ui_state = UIState::Main
-                        }
-                    }
-                    Command::none()
-                }
-                _ => Command::none(),
-            },
-            UIState::Main => match event {
-                Message::TickUpdate => {
-                    self.update_time();
-                    Command::none()
-                }
-                Message::TogglePlayback => {
-                    if self.sink.lock().is_none() {
-                        let _ = self.play_song_from_queue();
-                    } else {
-                        self.toggle_sink_playback();
-                    }
-                    Command::none()
-                }
-                Message::AddTestSongToQueue => {
-                    self.add_song_to_queue_end(Song::new(PathBuf::from_str("./test.ogg").unwrap()))
-                        .expect("adding song to queue failed");
-                    Command::none()
-                }
-                Message::Scan => {
-                    let mut jb = self.clone();
-                    println!("scanning...");
-                    Command::perform(async move { jb.scan_and_save() }, Message::ScanComplete)
-                }
-                Message::ScanComplete(result) => {
-                    match result {
-                        Ok(()) => self.load_library().unwrap(),
-                        Err(e) => {
-                            format!("Scan failed: {}", e);
-                        }
-                    }
-                    Command::none()
-                }
-                Message::PickSong(id) => {
-                    self.add_song_to_queue_end(
-                        self.music_library.lock().songs.get(&id).unwrap().clone(),
-                    )
-                    .expect("adding song to queue failed");
-                    Command::none()
-                }
-                Message::LoadComplete(result) => {
-                    match result {
-                        Ok(()) => {
-                            println!("Library loaded successfully.");
-                        }
-                        Err(e) => {
-                            println!("Load failed: {}", e);
-                        }
-                    }
-                    Command::none()
-                }
-                Message::PreviousSong => {
-                    let _ = self.prev_in_queue();
-                    Command::none()
-                }
-                Message::NextSong => {
-                    let _ = self.next_in_queue();
-                    Command::none()
-                }
-                Message::ChangeUI(ui_state) => {
-                    self.ui_state = ui_state;
-                    Command::none()
-                }
-                _ => Command::none(),
-            },
-            UIState::Settings => match event {
-                Message::SaveSettings(new_settings) => {
-                    self.global_settings = new_settings;
-                    Command::none()
-                }
-                Message::ChangeUI(ui_state) => {
-                    self.ui_state = ui_state;
-                    Command::none()
-                }
-                _ => Command::none(),
-            },
-        }
-    }
-
-    fn view(&self) -> Element<Message> {
-        match self.ui_state {
-            UIState::Loading => loading_ui(),
-            UIState::Main => main_ui(self.clone()),
-            UIState::Settings => settings_ui(self.global_settings.clone()),
-        }
-    }
+        .unwrap();
+    });
 }
 
-#[tokio::main]
-async fn main() -> iced::Result {
-    Jukebox::run(Settings::default())
-}
+// // UI/Iced
+// impl Application for Jukebox {
+//     type Executor = executor::Default;
+//     type Flags = ();
+//     type Message = Message;
+//     type Theme = Theme;
+
+//     fn new(_flags: ()) -> (Self, Command<Message>) {
+//         let app = Self::default();
+//         (
+//             app.clone(),
+//             Command::perform(async move { app.load_library() }, Message::LoadComplete),
+//         )
+//     }
+
+//     fn theme(&self) -> Theme {
+//         Theme::Dark
+//     }
+
+//     fn title(&self) -> String {
+//         String::from("Jukebox")
+//     }
+
+//     fn subscription(&self) -> Subscription<Self::Message> {
+//         // TODO get key input (handle media keys)
+//         const TICK_DURATION: f32 = 0.01;
+
+//         let time =
+//             iced::time::every(Duration::from_secs_f32(TICK_DURATION)).map(|_| Message::TickUpdate);
+
+//         Subscription::batch([time])
+//     }
+
+//     fn update(&mut self, event: Message) -> Command<Message> {
+//         match self.ui_state {
+//             UIState::Loading => match event {
+//                 Message::LoadComplete(result) => {
+//                     match result {
+//                         Ok(()) => {
+//                             println!("Library loaded successfully.");
+//                             self.ui_state = UIState::Main
+//                         }
+//                         Err(e) => {
+//                             println!("Load failed: {}", e);
+//                             self.ui_state = UIState::Main
+//                         }
+//                     }
+//                     Command::none()
+//                 }
+//                 _ => Command::none(),
+//             },
+//             UIState::Main => match event {
+//                 Message::TickUpdate => {
+//                     self.update_time();
+//                     Command::none()
+//                 }
+//                 Message::TogglePlayback => {
+//                     if self.sink.lock().is_none() {
+//                         let _ = self.play_song_from_queue();
+//                     } else {
+//                         self.toggle_sink_playback();
+//                     }
+//                     Command::none()
+//                 }
+//                 Message::AddTestSongToQueue => {
+//                     self.add_song_to_queue_end(Song::new(PathBuf::from_str("./test.ogg").unwrap()))
+//                         .expect("adding song to queue failed");
+//                     Command::none()
+//                 }
+//                 Message::Scan => {
+//                     let mut jb = self.clone();
+//                     println!("scanning...");
+//                     Command::perform(async move { jb.scan_and_save() }, Message::ScanComplete)
+//                 }
+//                 Message::ScanComplete(result) => {
+//                     match result {
+//                         Ok(()) => self.load_library().unwrap(),
+//                         Err(e) => {
+//                             format!("Scan failed: {}", e);
+//                         }
+//                     }
+//                     Command::none()
+//                 }
+//                 Message::PickSong(id) => {
+//                     self.add_song_to_queue_end(
+//                         self.music_library.lock().songs.get(&id).unwrap().clone(),
+//                     )
+//                     .expect("adding song to queue failed");
+//                     Command::none()
+//                 }
+//                 Message::LoadComplete(result) => {
+//                     match result {
+//                         Ok(()) => {
+//                             println!("Library loaded successfully.");
+//                         }
+//                         Err(e) => {
+//                             println!("Load failed: {}", e);
+//                         }
+//                     }
+//                     Command::none()
+//                 }
+//                 Message::PreviousSong => {
+//                     let _ = self.prev_in_queue();
+//                     Command::none()
+//                 }
+//                 Message::NextSong => {
+//                     let _ = self.next_in_queue();
+//                     Command::none()
+//                 }
+//                 Message::ChangeUI(ui_state) => {
+//                     self.ui_state = ui_state;
+//                     Command::none()
+//                 }
+//                 _ => Command::none(),
+//             },
+//             UIState::Settings => match event {
+//                 Message::SaveSettings(new_settings) => {
+//                     self.global_settings = new_settings;
+//                     Command::none()
+//                 }
+//                 Message::ChangeUI(ui_state) => {
+//                     self.ui_state = ui_state;
+//                     Command::none()
+//                 }
+//                 _ => Command::none(),
+//             },
+//         }
+//     }
+
+//     fn view(&self) -> Element<Message> {
+//         match self.ui_state {
+//             UIState::Loading => loading_ui(),
+//             UIState::Main => main_ui(self.clone()),
+//             UIState::Settings => settings_ui(self.global_settings.clone()),
+//         }
+//     }
+// }

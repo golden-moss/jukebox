@@ -153,6 +153,17 @@ impl Library {
         }
     }
 
+    // fn load(&self, path: ) -> Result<(), String> {
+    //     let load_path = self.global_settings.library_file.clone();
+    //     let library = Arc::clone(&self.music_library);
+    //     Library::read_from_file(&load_path)
+    //         .map(|new_lib| {
+    //             let mut lib = library.lock();
+    //             *lib = new_lib;
+    //         })
+    //         .map_err(|e| e.to_string())
+    // }
+
     fn add_song(&mut self, song: Song) -> Result<()> {
         // TODO check for duplicates (by name, possibly album, and artist)
         self.songs.insert(Uuid::new_v4(), song);
