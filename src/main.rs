@@ -10,18 +10,19 @@ use library::{Library, Song};
 use parking_lot::Mutex;
 use rodio::Sink;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, fs, io::BufReader, sync::Arc, time::Duration};
+use std::{collections::VecDeque, fs, future::Future, io::BufReader, sync::Arc, time::Duration};
 use uuid::Uuid;
 use views::{loading_ui::LoadingUI, main_ui::MainUI, settings_ui::SettingsUI};
 
 actions!(
-    application,
+    jukebox,
     [
         TogglePlayback,
         PreviousSong,
         NextSong,
         AddTestSongToQueue,
         Scan,
+        LoadLibrary,
         TickUpdate,
     ]
 );
@@ -232,16 +233,17 @@ impl Jukebox {
         Ok(())
     }
 
-    fn load_library(&self) -> Result<(), String> {
-        let load_path = self.global_settings.library_file.clone();
-        let library = Arc::clone(&self.music_library);
-        Library::read_from_file(&load_path)
-            .map(|new_lib| {
-                let mut lib = library.lock();
-                *lib = new_lib;
-            })
-            .map_err(|e| e.to_string())
-    }
+    // async fn load_library(&mut self) {
+    //     let load_path = self.global_settings.library_file.clone();
+    //     let library = Arc::clone(&self.music_library);
+    //     Library::read_from_file(&load_path)
+    //         .map(|new_lib| {
+    //             let mut lib = library.lock();
+    //             *lib = new_lib;
+    //         })
+    //         .map_err(|e| e.to_string());
+    //     // cx.notify();
+    // }
 
     fn scan_and_save(&mut self) -> Result<(), String> {
         //scan
@@ -275,13 +277,17 @@ impl Render for Jukebox {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         cx.set_window_title("jukebox");
         // cx.
+        // cx.on_action(cx.listener(Self::load_library));w
+        // cx.foreground_executor()
+        // .spawn(Library::load(&self.global_settings.library_file));
 
-        match self.ui_state {
+        match self.clone().ui_state {
             UIState::Loading => {
                 ui::root().child(cx.new_view(|cx| LoadingUI {
                     focus_handle: cx.focus_handle(),
                     // jukebox: self.clone(),
                 }))
+                // .on_action(cx.listener(Self::load_library))
             }
             UIState::Main => ui::root().child(cx.new_view(|cx| MainUI {
                 focus_handle: cx.focus_handle(),

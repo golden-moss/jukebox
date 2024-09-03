@@ -235,4 +235,12 @@ impl Library {
         let library: Library = toml::from_str(&contents)?;
         Ok(library)
     }
+
+    pub async fn load(file_path: &str) -> Result<Library> {
+        let mut file = File::open(file_path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let library: Library = toml::from_str(&contents)?;
+        Ok(library)
+    }
 }
