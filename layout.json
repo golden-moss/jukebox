@@ -1,0 +1,57 @@
+{
+  "panel_name": "StackPanel",
+  "children": [
+    {
+      "panel_name": "StackPanel",
+      "children": [],
+      "info": {
+        "panel": null
+      }
+    },
+    {
+      "panel_name": "StackPanel",
+      "children": [
+        {
+          "panel_name": "TabPanel",
+          "children": [],
+          "info": {
+            "panel": null
+          }
+        },
+        {
+          "panel_name": "TabPanel",
+          "children": [],
+          "info": {
+            "panel": null
+          }
+        }
+      ],
+      "info": {
+        "stack": {
+          "sizes": [
+            215.0,
+            217.0
+          ],
+          "axis": 1
+        }
+      }
+    },
+    {
+      "panel_name": "StackPanel",
+      "children": [],
+      "info": {
+        "panel": null
+      }
+    }
+  ],
+  "info": {
+    "stack": {
+      "sizes": [
+        300.0,
+        332.0,
+        350.0
+      ],
+      "axis": 0
+    }
+  }
+}

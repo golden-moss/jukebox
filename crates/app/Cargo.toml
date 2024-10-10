@@ -1,0 +1,21 @@
+[package]
+name = "jukebox"
+version = "0.1.0"
+description = "jukebox"
+authors = ["Josh Clemens (clemensjosh@proton.me)"]
+edition = "2021"
+
+[dependencies]
+gpui.workspace = true
+anyhow.workspace = true
+workspace.workspace = true
+ui.workspace = true
+uuid.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+lofty.workspace = true
+rodio.workspace = true
+toml.workspace = true
+walkdir.workspace = true
+parking_lot.workspace = true
+rust-embed = "8.5.0"
