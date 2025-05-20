@@ -100,7 +100,7 @@ impl Default for Jukebox {
             sink: Arc::new(Mutex::new(None)),
             global_settings: Self::read_or_create_config(),
             playback_settings: PlaybackSettings::default(), // TODO fetch
-            ui_state: UIState::Loading,
+            ui_state: UIState::Main,                        // TODO actually load
             music_library: Arc::new(Mutex::new(Library::new())),
             playback_queue: Arc::new(Mutex::new(VecDeque::new())),
             playback_index: 0,
@@ -303,7 +303,7 @@ impl Render for Jukebox {
 
 fn main() {
     App::new().run(|cx: &mut AppContext| {
-        let bounds = Bounds::centered(None, size(px(300.0), px(300.0)), cx);
+        let bounds = Bounds::centered(None, size(px(600.0), px(900.0)), cx);
 
         cx.open_window(
             WindowOptions {
